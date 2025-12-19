@@ -1,6 +1,6 @@
 'use client'
 import type { FC } from 'react'
-import React, { useCallback, useEffect, useMemo, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useState, useRef } from 'react'
 import { useBoolean } from 'ahooks'
 import { pick, uniq } from 'lodash-es'
 import {
@@ -29,7 +29,7 @@ import { useDatasetDetailContextWithSelector as useDatasetDetailContext } from '
 import type { Props as PaginationProps } from '@/app/components/base/pagination'
 import Pagination from '@/app/components/base/pagination'
 import Checkbox from '@/app/components/base/checkbox'
-import { useDocumentArchive, useDocumentDelete, useDocumentDisable, useDocumentEnable } from '@/service/knowledge/use-document'
+import { useDocumentArchive, useDocumentDelete, useDocumentDisable, useDocumentEnable, useToggleAutoUpgrade } from '@/service/knowledge/use-document'
 import { extensionToFileType } from '@/app/components/datasets/hit-testing/utils/extension-to-file-type'
 import useBatchEditDocumentMetadata from '../metadata/hooks/use-batch-edit-document-metadata'
 import EditMetadataBatchModal from '@/app/components/datasets/metadata/edit-metadata-batch/modal'
@@ -68,6 +68,8 @@ type IDocumentListProps = {
   onManageMetadata: () => void
   statusFilterValue: string
   remoteSortValue: string
+  globalUpdateEnable: boolean | undefined
+  setGlobalUpdateEnable: (value: boolean | undefined) => void
 }
 
 /**
@@ -84,21 +86,65 @@ const DocumentList: FC<IDocumentListProps> = ({
   onManageMetadata,
   statusFilterValue,
   remoteSortValue,
+  globalUpdateEnable,
 }) => {
   const { t } = useTranslation()
   const { formatTime } = useTimestamp()
   const router = useRouter()
   const datasetConfig = useDatasetDetailContext(s => s.dataset)
+  const [autoUpdateMap, setAutoUpdateMap] = useState<Record<string, boolean>>({})
   const chunkingMode = datasetConfig?.doc_form
   const isGeneralMode = chunkingMode !== ChunkingMode.parentChild
   const isQAMode = chunkingMode === ChunkingMode.qa
   const [sortField, setSortField] = useState<'name' | 'word_count' | 'hit_count' | 'created_at' | null>(null)
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
+  const toggleAutoUpgrade = useToggleAutoUpgrade()
 
   useEffect(() => {
     setSortField(null)
     setSortOrder('desc')
   }, [remoteSortValue])
+
+  useEffect(() => {
+    if (!documents?.length) return
+
+    const initialMap = documents.reduce((acc, doc) => {
+      const rawValue = doc.doc_metadata?.find(
+        (item: any) => item.name === 'doc_metadata'
+      )?.value
+
+      const docValue =
+        String(rawValue ?? '')
+          .match(/auto_upgrade['"]?\s*:\s*(True|False)/i)
+          ?.[1]
+          ?.toLowerCase() === 'true'
+
+      return {
+        ...acc,
+        [doc.id]: docValue ?? false
+      }
+    }, {} as Record<string, boolean>)
+
+    setAutoUpdateMap(initialMap)
+  }, [documents])
+
+  useEffect(() => {
+    if (globalUpdateEnable === undefined) return
+    const enable: boolean = globalUpdateEnable
+
+    setAutoUpdateMap(prev => {
+      const newMap: Record<string, boolean> = { ...prev }
+
+      documents.forEach(doc => {
+        if (prev[doc.id] !== enable) {
+          newMap[doc.id] = enable
+          toggleAutoUpgrade(datasetId, doc.id, enable)
+        }
+      })
+
+      return newMap
+    })
+  }, [globalUpdateEnable, documents, datasetId])
 
   const {
     isShowEditModal,
@@ -222,6 +268,7 @@ const DocumentList: FC<IDocumentListProps> = ({
   const { mutateAsync: enableDocument } = useDocumentEnable()
   const { mutateAsync: disableDocument } = useDocumentDisable()
   const { mutateAsync: deleteDocument } = useDocumentDelete()
+  const handleUpdateDocument = useCallback(async (documentId: string, enabled: boolean) => {}, [datasetId, enableDocument, disableDocument, onUpdate, t])
 
   const handleAction = (actionName: DocumentActionType) => {
     return async () => {
@@ -317,6 +364,7 @@ const DocumentList: FC<IDocumentListProps> = ({
                 {renderSortHeader('created_at', t('datasetDocuments.list.table.header.uploadTime'))}
               </td>
               <td className='w-40'>{t('datasetDocuments.list.table.header.status')}</td>
+              <td className='w-20'>{t('datasetDocuments.list.table.header.update')}</td>
               <td className='w-20'>{t('datasetDocuments.list.table.header.action')}</td>
             </tr>
           </thead>
@@ -430,6 +478,31 @@ const DocumentList: FC<IDocumentListProps> = ({
                     datasetId={datasetId}
                     detail={pick(doc, ['name', 'enabled', 'archived', 'id', 'data_source_type', 'doc_form', 'display_status'])}
                     onUpdate={onUpdate}
+                    autoUpdateValue={
+                      !doc.doc_metadata?.some((item: any) => item.name === 'doc_metadata')
+                        ? false
+                        : (autoUpdateMap[doc.id] ?? false)
+                    }
+                    autoUpdateDisabled={
+                      !doc.doc_metadata?.some((item: any) => item.name === 'doc_metadata')
+                    }
+                    onToggleAutoUpdate={async (v) => {
+                      globalUpdateEnable = undefined
+
+                      setAutoUpdateMap(prev => ({ ...prev, [doc.id]: v }))
+
+                      const [error] = await asyncRunSafe(
+                        toggleAutoUpgrade(datasetId, doc.id, v)
+                      )
+
+                      if (error) {
+                        setAutoUpdateMap(prev => ({ ...prev, [doc.id]: !v }))
+                        Toast.notify({
+                          type: 'error',
+                          message: t('common.actionMsg.modifiedUnsuccessfully'),
+                        })
+                      }
+                    }}
                   />
                 </td>
               </tr>

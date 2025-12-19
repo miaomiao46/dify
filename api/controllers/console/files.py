@@ -1,3 +1,4 @@
+import json
 from typing import Literal
 
 from flask import request
@@ -59,6 +60,7 @@ class FileApi(Resource):
         current_user, _ = current_account_with_tenant()
         source_str = request.form.get("source")
         source: Literal["datasets"] | None = "datasets" if source_str == "datasets" else None
+        file_metadata = request.form.get("file_metadata")
 
         if "file" not in request.files:
             raise NoFileUploadedError()
@@ -74,6 +76,11 @@ class FileApi(Resource):
 
         if source not in ("datasets", None):
             source = None
+        
+        if file_metadata is not None:
+            file_metadata = json.loads(file_metadata)
+            if not isinstance(file_metadata, dict):
+                file_metadata = None
 
         try:
             upload_file = FileService(db.engine).upload_file(
@@ -82,6 +89,7 @@ class FileApi(Resource):
                 mimetype=file.mimetype,
                 user=current_user,
                 source=source,
+                file_metadata=file_metadata,
             )
         except services.errors.file.FileTooLargeError as file_too_large_error:
             raise FileTooLargeError(file_too_large_error.description)

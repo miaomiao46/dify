@@ -220,12 +220,23 @@ class CustomOAuthCallback(Resource):
         if not account:
             logging.info("OAuthCallback not account")
             account = RegisterService.register(
-                email=user_info.email, name=user_info.name, language="zh-Hans", status=AccountStatus.PENDING, is_setup=True
+                email=user_info.email,
+                name=user_info.name,
+                language="zh-Hans",
+                status=AccountStatus.PENDING,
+                is_setup=True,
             )
             tenant_name = dept + "'s Workspace"
             tenant = db.session.query(Tenant).filter(Tenant.name == tenant_name).first()
-            TenantService.create_tenant_member(tenant, account, "normal")
-            TenantService.switch_tenant(account, tenant.id)
+            if not tenant:
+                logging.error("OAuthCallback not tenant")
+                return redirect(
+                    f"{dify_config.CONSOLE_WEB_URL}/signin"
+                    "?message=Workspace not found, please contact system admin to invite you to join in a workspace."
+                )
+            else:
+                TenantService.create_tenant_member(tenant, account, "normal")
+                TenantService.switch_tenant(account, tenant.id)
 
         if account.status == AccountStatus.PENDING:
             account.status = AccountStatus.ACTIVE

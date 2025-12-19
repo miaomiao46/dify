@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING, Annotated, Any, Optional, Union, cast
 from uuid import UUID
 from zoneinfo import available_timezones
 
+import httpx
 from flask import Response, stream_with_context
 from flask_restx import fields
 from pydantic import BaseModel
@@ -225,6 +226,64 @@ def extract_remote_ip(request) -> str:
 def generate_text_hash(text: str) -> str:
     hash_text = str(text) + "None"
     return sha256(hash_text.encode()).hexdigest()
+
+
+class ConfluencePageInfo:
+    def __init__(self, page_id: str, filename: str, content: str):
+        self.page_id = page_id
+        self.filename = filename
+        self.content = content
+        self.mimetype = "text/markdown"
+
+    def to_dict(self) -> dict[str, str]:
+        return {"page_id": self.page_id, "filename": self.filename, "content": self.content}
+
+
+class ConfluenceFetcher:
+    @staticmethod
+    def fetch_confluence_page_by_ids(page_ids: list[str]) -> list[ConfluencePageInfo]:
+        results = []
+        base_url = dify_config.CONFLUENCE2MARKDOWN_URL
+
+        if not base_url:
+            logging.error("confluence2markdown_url is not set")
+            return []
+
+        with httpx.Client(timeout=10.0) as client:
+            for page_id in page_ids:
+                url = base_url + page_id
+                try:
+                    response = client.get(url)
+                    response.raise_for_status()
+                    text_content = response.text
+
+                    sections = re.split(r"<!--\s*Page:\s*(.*?)\s*-->", text_content)
+                    for i in range(1, len(sections), 2):
+                        name = sections[i].strip()
+                        content = sections[i + 1].strip() if i + 1 < len(sections) else ""
+                        if name and content:
+                            results.append(
+                                ConfluencePageInfo(
+                                    page_id=page_id,
+                                    filename=name,
+                                    content=content,
+                                )
+                            )
+
+                except httpx.RequestError:
+                    logging.exception(
+                        "get_confluence2markdown_content 请求失败（网络错误）: page_id=%s",
+                        page_id,
+                    )
+                    return []
+                except httpx.HTTPStatusError:
+                    logging.exception(
+                        "get_confluence2markdown_content 请求失败（HTTP 状态码异常）: page_id=%s",
+                        page_id,
+                    )
+                    return []
+
+        return results
 
 
 def compact_generate_response(response: Union[Mapping, Generator, RateLimitGenerator]) -> Response:

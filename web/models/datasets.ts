@@ -87,6 +87,7 @@ export type DataSet = {
   runtime_mode: 'rag_pipeline' | 'general'
   enable_api: boolean // Indicates if the service API is enabled
   is_multimodal: boolean // Indicates if the dataset supports multimodal
+  auto_upgrade: boolean
 }
 
 export type ExternalAPIItem = {
@@ -136,6 +137,12 @@ export type CustomFile = File & {
   mime_type?: string
   created_by?: string
   created_at?: number
+  fileMetadata?: FileMetadata
+}
+
+export type FileMetadata = {
+  upload_type?: string
+  confluence_page_id?: string
 }
 
 export type DocumentItem = {

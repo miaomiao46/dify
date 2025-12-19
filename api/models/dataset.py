@@ -79,6 +79,7 @@ class Dataset(Base):
     chunk_structure = mapped_column(sa.String(255), nullable=True)
     enable_api = mapped_column(sa.Boolean, nullable=False, server_default=sa.text("true"))
     is_multimodal = mapped_column(sa.Boolean, default=False, nullable=False, server_default=db.text("false"))
+    auto_upgrade = db.Column(db.Boolean, nullable=False, server_default=db.text("false"))
 
     @property
     def total_documents(self):
@@ -593,6 +594,14 @@ class Document(Base):
                 "name": BuiltInField.source,
                 "type": "string",
                 "value": MetadataDataSource[self.data_source_type],
+            }
+        )
+        built_in_fields.append(
+            {
+                "id": "built-in",
+                "name": "doc_metadata",
+                "type": "dict",
+                "value": self.doc_metadata,
             }
         )
         return built_in_fields

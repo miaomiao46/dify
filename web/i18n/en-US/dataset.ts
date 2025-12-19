@@ -177,6 +177,7 @@ const translation = {
   allKnowledge: 'All Knowledge',
   allKnowledgeDescription: 'Select to display all knowledge in this workspace. Only the Workspace Owner can manage all knowledge.',
   embeddingModelNotAvailable: 'Embedding model is unavailable.',
+  patchAutoUpdate: 'Patch Auto Update',
   metadata: {
     metadata: 'Metadata',
     addMetadata: 'Add Metadata',

@@ -104,6 +104,15 @@ class DocumentRenamePayload(BaseModel):
     name: str
 
 
+class DocumentAutoUpgrade(BaseModel):
+    auto_upgrade: bool
+
+
+class DocumentAutoUpgradeBatch(BaseModel):
+    auto_upgrade: bool
+    document_ids: list[str]
+
+
 register_schema_models(
     console_ns,
     KnowledgeConfig,
@@ -111,6 +120,8 @@ register_schema_models(
     RetrievalModel,
     DocumentRetryPayload,
     DocumentRenamePayload,
+    DocumentAutoUpgrade,
+    DocumentAutoUpgradeBatch,
 )
 
 
@@ -1117,6 +1128,46 @@ class DocumentRenameApi(DocumentResource):
             raise DocumentIndexingError("Cannot delete document during indexing.")
 
         return document
+
+
+@console_ns.route("/datasets/<uuid:dataset_id>/documents/<uuid:document_id>/auto_upgrade")
+class DocumentAutoUpgradeApi(DocumentResource):
+    @setup_required
+    @login_required
+    @account_initialization_required
+    @marshal_with(document_fields)
+    @console_ns.expect(console_ns.models[DocumentAutoUpgrade.__name__])
+    def post(self, dataset_id, document_id):
+        _, current_tenant_id = current_account_with_tenant()
+        dataset_id = str(dataset_id)
+        dataset = DatasetService.get_dataset(dataset_id)
+        if not dataset:
+            raise NotFound("Dataset not found.")
+        document_id = str(document_id)
+        document = DocumentService.get_document(dataset.id, document_id)
+        if not document:
+            raise NotFound("Document not found.")
+        if document.tenant_id != current_tenant_id:
+            raise Forbidden("No permission.")
+        payload = DocumentAutoUpgrade.model_validate(console_ns.payload or {})
+        DocumentService.update_auto_upgrade_status(document_id, payload.auto_upgrade)
+        return {"result": "success"}, 200
+
+
+@console_ns.route("/datasets/<uuid:dataset_id>/documents/auto_upgrade")
+class DocumentAutoUpgradeBatchApi(DocumentResource):
+    @setup_required
+    @login_required
+    @account_initialization_required
+    @console_ns.expect(console_ns.models[DocumentAutoUpgradeBatch.__name__])
+    def post(self, dataset_id):
+        dataset_id = str(dataset_id)
+        dataset = DatasetService.get_dataset(dataset_id)
+        if not dataset:
+            raise NotFound("Dataset not found.")
+        payload = DocumentAutoUpgradeBatch.model_validate(console_ns.payload or {})
+        DocumentService.update_auto_upgrade_status_batch(dataset_id, payload.document_ids, payload.auto_upgrade)
+        return {"result": "success"}, 200
 
 
 @console_ns.route("/datasets/<uuid:dataset_id>/documents/<uuid:document_id>/website-sync")

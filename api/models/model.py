@@ -1757,6 +1757,7 @@ class UploadFile(Base):
     used_at: Mapped[datetime | None] = mapped_column(sa.DateTime, nullable=True)
     hash: Mapped[str | None] = mapped_column(String(255), nullable=True)
     source_url: Mapped[str] = mapped_column(LongText, default="")
+    file_metadata: Mapped[Optional[dict]] = db.Column(db.JSON, nullable=True)
 
     def __init__(
         self,
@@ -1776,6 +1777,7 @@ class UploadFile(Base):
         used_at: datetime | None = None,
         hash: str | None = None,
         source_url: str = "",
+        file_metadata: dict | None = None,
     ):
         self.id = str(uuid.uuid4())
         self.tenant_id = tenant_id
@@ -1793,6 +1795,7 @@ class UploadFile(Base):
         self.used_at = used_at
         self.hash = hash
         self.source_url = source_url
+        self.file_metadata = file_metadata
 
 
 class ApiRequest(TypeBase):

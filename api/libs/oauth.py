@@ -159,6 +159,8 @@ class CustomOAuth(OAuth):
         return f"{self._AUTH_URL}?{query_string}"
 
     def get_access_token(self, code: str):
+        if not self._TOKEN_URL:
+            raise NotImplementedError()
         data = {
             "grant_type": "authorization_code",
             "client_id": self.client_id,
@@ -171,6 +173,8 @@ class CustomOAuth(OAuth):
         return response.json()["access_token"]
 
     def get_raw_user_info(self, token: str):
+        if not self._USER_INFO_URL:
+            raise NotImplementedError()
         headers = {"Authorization": f"Bearer {token}"}
         response = httpx.get(self._USER_INFO_URL, headers=headers)
         return response.json()
@@ -179,5 +183,5 @@ class CustomOAuth(OAuth):
         return OAuthUserInfo(
             id=str(raw_info["sub"]),
             name=raw_info.get("name", ""),
-            email=raw_info.get("email")
+            email=raw_info.get("email", "")
         )
