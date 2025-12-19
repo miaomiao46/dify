@@ -9,3 +9,7 @@ html[data-theme="dark"] .githubIcon {
 .googleIcon {
   background: center/contain url('./assets/google.svg') no-repeat;
 }
+
+.cffexIcon {
+  background: center/contain url('./assets/cffex.svg') no-repeat;
+}
