@@ -30,7 +30,7 @@ def deal_dataset_index_update_task(dataset_id: str, action: str):
         if not dataset:
             raise Exception("Dataset not found")
         index_type = dataset.doc_form or IndexStructureType.PARAGRAPH_INDEX
-        index_processor = IndexProcessorFactory(index_type).init_index_processor()
+        index_processor = IndexProcessorFactory(index_type, skip_validate_split=True).init_index_processor()
         if action == "upgrade":
             dataset_documents = (
                 db.session.query(DatasetDocument)

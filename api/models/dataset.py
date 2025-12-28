@@ -24,7 +24,7 @@ from core.rag.retrieval.retrieval_methods import RetrievalMethod
 from core.tools.signature import sign_upload_file
 from extensions.ext_storage import storage
 from libs.uuid_utils import uuidv7
-from services.entities.knowledge_entities.knowledge_entities import ParentMode, Rule
+from services.entities.knowledge_entities.knowledge_entities import ParentMode, Rule, SplitStrategy
 
 from .account import Account
 from .base import Base, TypeBase
@@ -326,11 +326,18 @@ class DatasetProcessRule(Base):  # bug
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, server_default=func.current_timestamp())
 
     MODES = ["automatic", "custom", "hierarchical"]
-    PRE_PROCESSING_RULES = ["remove_stopwords", "remove_extra_spaces", "remove_urls_emails"]
+    # add ocr model recognition option
+    PRE_PROCESSING_RULES = [
+        "remove_stopwords",
+        "remove_extra_spaces",
+        "remove_urls_emails",
+        "enable_table_and_pic_recognition",
+    ]
     AUTOMATIC_RULES: dict[str, Any] = {
         "pre_processing_rules": [
             {"id": "remove_extra_spaces", "enabled": True},
             {"id": "remove_urls_emails", "enabled": False},
+            {"id": "enable_table_and_pic_recognition", "enabled": False},
         ],
         "segmentation": {"delimiter": "\n", "max_tokens": 500, "chunk_overlap": 50},
     }
@@ -389,6 +396,8 @@ class Document(Base):
 
     # split
     splitting_completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    # split strategy
+    split_strategy = db.Column(db.Text, nullable=True)
 
     # indexing
     tokens: Mapped[int | None] = mapped_column(sa.Integer, nullable=True)
@@ -554,6 +563,26 @@ class Document(Base):
             return self.dataset_process_rule.to_dict()
         return None
 
+    @property
+    def split_strategy_dict(self):
+        if self.split_strategy:
+            try:
+                strategy_dict = json.loads(self.split_strategy)
+                return SplitStrategy(**strategy_dict)
+            except (JSONDecodeError, TypeError, ValueError):
+                return None
+        return None
+
+    @property
+    def external_index_processor_config(self):
+        config = {}
+        split_strategy = self.split_strategy_dict
+
+        if split_strategy and split_strategy.external_strategy_desc:
+            config["server_address"] = split_strategy.external_strategy_desc.url
+
+        return config
+
     def get_built_in_fields(self) -> list[dict[str, Any]]:
         built_in_fields: list[dict[str, Any]] = []
         built_in_fields.append(
@@ -627,6 +656,7 @@ class Document(Base):
             "parsing_completed_at": self.parsing_completed_at,
             "cleaning_completed_at": self.cleaning_completed_at,
             "splitting_completed_at": self.splitting_completed_at,
+            "split_strategy": self.split_strategy_dict,
             "tokens": self.tokens,
             "indexing_latency": self.indexing_latency,
             "completed_at": self.completed_at,

@@ -175,7 +175,7 @@ export const useToggleAutoUpgrade = () => {
 export const useToggleAutoUpgradeBatch = () => {
   return async (datasetId: string, documentIds: string[], enable: boolean) => {
     return post(`/datasets/${datasetId}/documents/auto_upgrade`, {
-        body: { document_ids: documentIds, auto_upgrade: enable },
+      body: { document_ids: documentIds, auto_upgrade: enable },
     })
   }
 }

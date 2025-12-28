@@ -51,6 +51,7 @@ class FileService:
         source: Literal["datasets"] | None = None,
         source_url: str = "",
         file_metadata: dict | None = None,
+        used: bool = False,
     ) -> UploadFile:
         # get file extension
         extension = os.path.splitext(filename)[1].lstrip(".").lower()
@@ -103,7 +104,7 @@ class FileService:
             created_by_role=(CreatorUserRole.ACCOUNT if isinstance(user, Account) else CreatorUserRole.END_USER),
             created_by=user.id,
             created_at=naive_utc_now(),
-            used=False,
+            used=used,
             hash=hashlib.sha3_256(content).hexdigest(),
             source_url=source_url,
             file_metadata=file_metadata,
@@ -266,5 +267,43 @@ class FileService:
         """根据租户id和文档id获取的文件对象"""
         # 查询与文件关联的 UploadFile 对象
         with self._session_maker(expire_on_commit=False) as session:
-            file: UploadFile | None = session.query(UploadFile).filter(UploadFile.tenant_id == tenant_id, UploadFile.id == file_id).first()
+            file: UploadFile | None = (
+                session.query(UploadFile).filter(UploadFile.tenant_id == tenant_id, UploadFile.id == file_id).first()
+            )
             return file
+
+    def get_unused_files_by_tenant_and_user(self, tenant_id: str, user_id: str):
+        """
+        获取指定租户和用户创建的未使用文件列表
+
+        Args:
+            tenant_id: 租户ID
+            user_id: 用户ID
+
+        Returns:
+            未使用的文件列表
+        """
+
+        with self._session_maker(expire_on_commit=False) as session:
+            unused_files = (
+                session.query(UploadFile)
+                .where(UploadFile.tenant_id == tenant_id, UploadFile.created_by == user_id, UploadFile.used == False)
+                .all()
+            )
+
+        return unused_files
+
+    def mark_file_used(self, file_ids: list[str], tenant_id: str):
+        if file_ids is not None and len(file_ids) > 0:
+            with self._session_maker(expire_on_commit=False) as session:
+                file_details = (
+                    session.query(UploadFile)
+                    .filter(UploadFile.tenant_id == tenant_id, UploadFile.id.in_(file_ids))
+                    .all()
+                )
+
+                # mark file used
+                for file in file_details:
+                    file.used = True
+
+                session.commit()

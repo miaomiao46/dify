@@ -412,6 +412,7 @@ class DatasetService:
         Args:
             dataset_id: The unique identifier of the dataset to update
             data: Dictionary containing the update data
+            data: Dictionary containing the update data
             user: The user performing the update operation
 
         Returns:
@@ -1121,6 +1122,7 @@ class DocumentService:
             "pre_processing_rules": [
                 {"id": "remove_extra_spaces", "enabled": True},
                 {"id": "remove_urls_emails", "enabled": False},
+                {"id": "enable_table_and_pic_recognition", "enabled": False},
             ],
             "segmentation": {"delimiter": "\n", "max_tokens": 1024, "chunk_overlap": 50},
         },
@@ -1302,7 +1304,7 @@ class DocumentService:
             # 触发异步任务进行文档索引更新
             DocumentIndexingTaskProxy(document.tenant_id, document.dataset_id, document_ids).delay()
 
-        except Exception as e:
+        except Exception:
             logging.exception(f"Failed to update document {document.id} with file {file.id}")
             # 发生异常时，可以选择恢复文档状态，或者做其他异常处理
             db.session.rollback()
@@ -1726,11 +1728,26 @@ class DocumentService:
                             dataset_process_rule = dataset.latest_process_rule
                             if not dataset_process_rule:
                                 raise ValueError("No process rule found.")
+                            logger.info(f"当前dataset的process rule为: {dataset_process_rule.rules_dict}\n")
                     elif process_rule.mode == "automatic":
+                        automatic_rules = copy.deepcopy(DatasetProcessRule.AUTOMATIC_RULES)
+
+                        # Check if process_rule has rules and pre_processing_rules
+                        if process_rule.rules and process_rule.rules.pre_processing_rules:
+                            # Look for ocr_recognition rule in knowledge_config
+                            for rule in process_rule.rules.pre_processing_rules:
+                                if rule.id == "enable_table_and_pic_recognition" and rule.enabled:
+                                    # Update the ocr_recognition enabled status in automatic_rules
+                                    for auto_rule in automatic_rules["pre_processing_rules"]:
+                                        if auto_rule["id"] == "enable_table_and_pic_recognition":
+                                            auto_rule["enabled"] = True
+                                            break
+                                    break
+
                         dataset_process_rule = DatasetProcessRule(
                             dataset_id=dataset.id,
                             mode=process_rule.mode,
-                            rules=json.dumps(DatasetProcessRule.AUTOMATIC_RULES),
+                            rules=json.dumps(automatic_rules),
                             created_by=account.id,
                         )
                     else:
@@ -1830,7 +1847,10 @@ class DocumentService:
                                     account,
                                     file.name,
                                     batch,
-                                    extra_metadata,
+                                    split_strategy=knowledge_config.split_strategy.model_dump()
+                                    if knowledge_config.split_strategy
+                                    else None,
+                                    extra_metadata=extra_metadata,
                                 )
                                 db.session.add(document)
                                 db.session.flush()
@@ -1883,6 +1903,9 @@ class DocumentService:
                                         account,
                                         truncated_page_name,
                                         batch,
+                                        split_strategy=knowledge_config.split_strategy.model_dump()
+                                        if knowledge_config.split_strategy
+                                        else None,
                                     )
                                     db.session.add(document)
                                     db.session.flush()
@@ -1923,6 +1946,9 @@ class DocumentService:
                                 account,
                                 document_name,
                                 batch,
+                                split_strategy=knowledge_config.split_strategy.model_dump()
+                                if knowledge_config.split_strategy
+                                else None,
                             )
                             db.session.add(document)
                             db.session.flush()
@@ -2241,6 +2267,7 @@ class DocumentService:
         account: Account,
         name: str,
         batch: str,
+        split_strategy: dict | None = None,
         extra_metadata: dict[str, Any] | None = None,
     ):
         document = Document(
@@ -2256,6 +2283,7 @@ class DocumentService:
             created_by=account.id,
             doc_form=document_form,
             doc_language=document_language,
+            split_strategy=json.dumps(split_strategy) if split_strategy else None,
         )
         doc_metadata = {}
         if dataset.built_in_field_enabled:
@@ -2359,7 +2387,7 @@ class DocumentService:
                             DocMetadataField.doc_hash: file_metadata.get("doc_hash", ""),
                             DocMetadataField.auto_upgrade: False,
                         }
-                    
+
             elif document_data.data_source.info_list.data_source_type == "notion_import":
                 if not document_data.data_source.info_list.notion_info_list:
                     raise ValueError("No notion info list found.")
@@ -2954,7 +2982,13 @@ class SegmentService:
             try:
                 keywords = args.get("keywords")
                 keywords_list = [keywords] if keywords is not None else None
-                VectorService.create_segments_vector(keywords_list, [segment_document], dataset, document.doc_form)
+                VectorService.create_segments_vector(
+                    keywords_list,
+                    [segment_document],
+                    dataset,
+                    document.doc_form,
+                    document.external_index_processor_config,
+                )
             except Exception as e:
                 logger.exception("create segment index failed")
                 segment_document.enabled = False
@@ -3044,7 +3078,11 @@ class SegmentService:
                 try:
                     # save vector index
                     VectorService.create_segments_vector(
-                        keywords_list, pre_segment_data_list, dataset, document.doc_form
+                        keywords_list,
+                        pre_segment_data_list,
+                        dataset,
+                        document.doc_form,
+                        document.external_index_processor_config,
                     )
                 except Exception as e:
                     logger.exception("create segment index failed")
@@ -3142,7 +3180,11 @@ class SegmentService:
                         VectorService.generate_child_chunks(
                             segment, document, dataset, embedding_model_instance, processing_rule, True
                         )
-                elif document.doc_form in (IndexStructureType.PARAGRAPH_INDEX, IndexStructureType.QA_INDEX):
+                elif document.doc_form in (
+                    IndexStructureType.PARAGRAPH_INDEX,
+                    IndexStructureType.QA_INDEX,
+                    IndexStructureType.EXTERNAL_INDEX,
+                ):
                     if args.enabled or keyword_changed:
                         # update segment vector index
                         VectorService.update_segment_vector(args.keywords, segment, dataset)
@@ -3217,7 +3259,11 @@ class SegmentService:
                         VectorService.generate_child_chunks(
                             segment, document, dataset, embedding_model_instance, processing_rule, True
                         )
-                elif document.doc_form in (IndexStructureType.PARAGRAPH_INDEX, IndexStructureType.QA_INDEX):
+                elif document.doc_form in (
+                    IndexStructureType.PARAGRAPH_INDEX,
+                    IndexStructureType.QA_INDEX,
+                    IndexStructureType.EXTERNAL_INDEX,
+                ):
                     # update segment vector index
                     VectorService.update_segment_vector(args.keywords, segment, dataset)
             # update multimodel vector index

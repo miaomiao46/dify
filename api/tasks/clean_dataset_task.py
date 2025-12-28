@@ -84,7 +84,7 @@ def clean_dataset_task(
         # Add exception handling around IndexProcessorFactory.clean() to prevent single point of failure
         # This ensures Document/Segment deletion can continue even if vector database cleanup fails
         try:
-            index_processor = IndexProcessorFactory(doc_form).init_index_processor()
+            index_processor = IndexProcessorFactory(doc_form, skip_validate_split=True).init_index_processor()
             index_processor.clean(dataset, None, with_keywords=True, delete_child_chunks=True)
             logger.info(click.style(f"Successfully cleaned vector database for dataset: {dataset_id}", fg="green"))
         except Exception:

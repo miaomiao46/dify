@@ -1,8 +1,8 @@
 # Variables
-DOCKER_REGISTRY=langgenius
+DOCKER_REGISTRY=kgpp34
 WEB_IMAGE=$(DOCKER_REGISTRY)/dify-web
 API_IMAGE=$(DOCKER_REGISTRY)/dify-api
-VERSION=latest
+VERSION=1.11.0-alpha1
 
 # Default target - show help
 .DEFAULT_GOAL := help

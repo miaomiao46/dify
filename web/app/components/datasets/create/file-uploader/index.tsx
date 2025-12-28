@@ -12,7 +12,7 @@ import SimplePieChart from '@/app/components/base/simple-pie-chart'
 
 import { upload } from '@/service/base'
 import { useFileSupportTypes, useFileUploadConfig } from '@/service/use-common'
-import {deleteFile} from '@/service/datasets'
+import { deleteFile } from '@/service/datasets'
 import I18n from '@/context/i18n'
 import { LanguagesSupported } from '@/i18n-config/language'
 import { IS_CE_EDITION } from '@/config'
@@ -114,9 +114,8 @@ const FileUploader = ({
   const fileUpload = useCallback(async (fileItem: FileItem): Promise<FileItem> => {
     const formData = new FormData()
     formData.append('file', fileItem.file)
-    if ((fileItem.file as File).fileMetadata) {
+    if ((fileItem.file as File).fileMetadata)
       formData.append('file_metadata', JSON.stringify((fileItem.file as File).fileMetadata))
-    }
     const onProgress = (e: ProgressEvent) => {
       if (e.lengthComputable) {
         const percent = Math.floor(e.loaded / e.total * 100)
@@ -225,7 +224,7 @@ const FileUploader = ({
             files.push({ name, content })
         }
 
-        const newFiles = files.map(file => {
+        const newFiles = files.map((file) => {
           const f = new File([file.content], `${file.name}.md`, { type: 'text/markdown' }) as File
           ;(f as File).fileMetadata = {
             upload_type: 'confluence',

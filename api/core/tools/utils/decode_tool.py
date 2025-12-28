@@ -11,7 +11,7 @@ def get_dept_from_token(token: str):
         groups = payload_dict.get("user", {}).get("groups", [])
         dept = groups[0].get("name", [])
         return dept
-    except Exception as e:
+    except Exception:
         return None
 
 

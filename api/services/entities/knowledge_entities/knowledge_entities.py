@@ -1,5 +1,5 @@
 from enum import StrEnum
-from typing import Literal
+from typing import Literal, Optional
 
 from pydantic import BaseModel
 
@@ -112,6 +112,16 @@ class MetaDataConfig(BaseModel):
     doc_metadata: dict
 
 
+class ExternalStrategyDesc(BaseModel):
+    type: Optional[str] = None
+    url: Optional[str] = None
+
+
+class SplitStrategy(BaseModel):
+    type: Optional[str] = None
+    external_strategy_desc: Optional[ExternalStrategyDesc] = None
+
+
 class KnowledgeConfig(BaseModel):
     original_document_id: str | None = None
     duplicate: bool = True
@@ -124,6 +134,7 @@ class KnowledgeConfig(BaseModel):
     embedding_model: str | None = None
     embedding_model_provider: str | None = None
     name: str | None = None
+    split_strategy: Optional[SplitStrategy] = None
     is_multimodal: bool = False
 
 

@@ -1180,7 +1180,7 @@ class CeleryScheduleTasksConfig(BaseSettings):
         description="Proactive subscription refresh threshold in seconds",
         default=60 * 60,
     )
-    
+
     CONFLUENCE_RESYNC_INTERVAL_MINUTES: int = Field(
         description="Interval in minutes for Confluence resync task, default 30 minutes",
         default=30,

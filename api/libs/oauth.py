@@ -180,8 +180,4 @@ class CustomOAuth(OAuth):
         return response.json()
 
     def _transform_user_info(self, raw_info: dict) -> OAuthUserInfo:
-        return OAuthUserInfo(
-            id=str(raw_info["sub"]),
-            name=raw_info.get("name", ""),
-            email=raw_info.get("email", "")
-        )
+        return OAuthUserInfo(id=str(raw_info["sub"]), name=raw_info.get("name", ""), email=raw_info.get("email", ""))

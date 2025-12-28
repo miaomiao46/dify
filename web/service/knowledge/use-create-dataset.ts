@@ -17,6 +17,7 @@ import type {
   NotionInfo,
   ProcessRule,
   ProcessRuleResponse,
+  SplitStrategyDetail,
   createDocumentResponse,
 } from '@/models/datasets'
 import type { DataSourceProvider, NotionPage } from '@/models/common'
@@ -74,7 +75,8 @@ type GetFileIndexingEstimateParamsOptionBase = {
   docLanguage: string
   indexingTechnique: IndexingType
   processRule: ProcessRule
-  dataset_id: string
+  dataset_id: string,
+  split_strategy?: SplitStrategyDetail
 }
 
 type GetFileIndexingEstimateParamsOptionFile = GetFileIndexingEstimateParamsOptionBase & {
@@ -90,6 +92,7 @@ const getFileIndexingEstimateParamsForFile = ({
   indexingTechnique,
   processRule,
   dataset_id,
+  split_strategy,
 }: GetFileIndexingEstimateParamsOptionFile): IndexingEstimateParams => {
   return {
     info_list: {
@@ -103,6 +106,7 @@ const getFileIndexingEstimateParamsForFile = ({
     doc_form: docForm,
     doc_language: docLanguage,
     dataset_id,
+    split_strategy,
   }
 }
 
