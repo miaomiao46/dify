@@ -1,8 +1,9 @@
+import json
 from typing import Literal
 
 from flask import request
 from flask_restx import Resource, marshal_with
-from werkzeug.exceptions import Forbidden
+from werkzeug.exceptions import Forbidden, NotFound
 
 import services
 from configs import dify_config
@@ -59,6 +60,7 @@ class FileApi(Resource):
         current_user, _ = current_account_with_tenant()
         source_str = request.form.get("source")
         source: Literal["datasets"] | None = "datasets" if source_str == "datasets" else None
+        file_metadata = request.form.get("file_metadata")
 
         if "file" not in request.files:
             raise NoFileUploadedError()
@@ -75,6 +77,11 @@ class FileApi(Resource):
         if source not in ("datasets", None):
             source = None
 
+        if file_metadata is not None:
+            file_metadata = json.loads(file_metadata)
+            if not isinstance(file_metadata, dict):
+                file_metadata = None
+
         try:
             upload_file = FileService(db.engine).upload_file(
                 filename=file.filename,
@@ -82,6 +89,7 @@ class FileApi(Resource):
                 mimetype=file.mimetype,
                 user=current_user,
                 source=source,
+                file_metadata=file_metadata,
             )
         except services.errors.file.FileTooLargeError as file_too_large_error:
             raise FileTooLargeError(file_too_large_error.description)
@@ -111,3 +119,48 @@ class FileSupportTypeApi(Resource):
     @account_initialization_required
     def get(self):
         return {"allowed_extensions": list(DOCUMENT_EXTENSIONS)}
+
+
+@console_ns.route("/files/unused")
+class UnusedFilesApi(Resource):
+    @setup_required
+    @login_required
+    @account_initialization_required
+    @marshal_with(file_fields)
+    def get(self):
+        """获取当前登录用户创建的未使用文件列表"""
+        current_user, tenant_id = current_account_with_tenant()
+
+        unused_files = FileService(db.engine).get_unused_files_by_tenant_and_user(tenant_id, current_user.id)
+
+        return unused_files, 200
+
+
+@console_ns.route("/files/<uuid:file_id>")
+class FileDeleteApi(Resource):
+    """删除指定的文件"""
+
+    @setup_required
+    @login_required
+    @account_initialization_required
+    def delete(self, file_id):
+        """删除指定ID的文件
+
+        Args:
+            file_id: 要删除的文件ID
+        """
+        file_id_str = str(file_id)
+
+        try:
+            # 调用文件服务删除文件
+            FileService(db.engine).delete_file(file_id_str)
+            return {"result": "success"}, 200
+        except NotFound:
+            # 文件未找到
+            return {"error": "文件未找到"}, 404
+        except ValueError as e:
+            # 文件正在使用中，不能删除
+            return {"error": str(e)}, 403
+        except Exception as e:
+            # 其他未预期的错误
+            return {"error": f"删除文件时发生错误: {str(e)}"}, 500

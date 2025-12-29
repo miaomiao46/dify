@@ -100,7 +100,8 @@ def add_document_to_index_task(dataset_document_id: str):
             documents.append(document)
 
         index_type = dataset.doc_form
-        index_processor = IndexProcessorFactory(index_type).init_index_processor()
+        config_options = dataset_document.external_index_processor_config
+        index_processor = IndexProcessorFactory(index_type, config_options=config_options).init_index_processor()
         index_processor.load(dataset, documents, multimodal_documents=multimodal_documents)
 
         # delete auto disable log

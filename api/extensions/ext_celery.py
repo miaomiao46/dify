@@ -172,6 +172,12 @@ def init_app(app: DifyApp) -> Celery:
             "task": "schedule.trigger_provider_refresh_task.trigger_provider_refresh",
             "schedule": timedelta(minutes=dify_config.TRIGGER_PROVIDER_REFRESH_INTERVAL),
         }
+    if dify_config.ENABLE_CONFLUENCE_RESYNC_TASK:
+        imports.append("schedule.confluence_resync_task")
+        beat_schedule["confluence_resync_task"] = {
+            "task": "schedule.confluence_resync_task.resync_task",
+            "schedule": timedelta(minutes=dify_config.CONFLUENCE_RESYNC_INTERVAL_MINUTES),
+        }
     celery_app.conf.update(beat_schedule=beat_schedule, imports=imports)
 
     return celery_app

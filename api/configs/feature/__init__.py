@@ -807,6 +807,36 @@ class AuthConfig(BaseSettings):
         default=None,
     )
 
+    ONEDOT_OAUTH_CLIENT_ID: str | None = Field(
+        description="OneDot OAuth client ID",
+        default="dify",
+    )
+
+    ONEDOT_OAUTH_CLIENT_SECRET: str | None = Field(
+        description="OneDot OAuth client secret",
+        default="dify",
+    )
+
+    ONEDOT_OAUTH_AUTH_URL: str | None = Field(
+        description="OneDot OAuth auth url",
+        default="http://172.31.69.113:10087/oauth2/authorize",
+    )
+
+    ONEDOT_OAUTH_TOKEN_URL: str | None = Field(
+        description="OneDot OAuth token url",
+        default="http://172.31.69.113:10087/oauth2/token",
+    )
+
+    ONEDOT_OAUTH_USER_INFO_URL: str | None = Field(
+        description="OneDot OAuth user info url",
+        default="http://172.31.69.113:10087/userinfo",
+    )
+
+    CONFLUENCE2MARKDOWN_URL: str | None = Field(
+        description="confluence2markdown url",
+        default="http://confluence2markdown.rag.com/confluence2md/page/",
+    )
+
     ACCESS_TOKEN_EXPIRE_MINUTES: PositiveInt = Field(
         description="Expiration time for access tokens in minutes",
         default=60,
@@ -1112,6 +1142,10 @@ class CeleryScheduleTasksConfig(BaseSettings):
         description="Enable workflow schedule poller task",
         default=True,
     )
+    ENABLE_CONFLUENCE_RESYNC_TASK: bool = Field(
+        description="Enable confluence auto sync task",
+        default=True,
+    )
     WORKFLOW_SCHEDULE_POLLER_INTERVAL: int = Field(
         description="Workflow schedule poller interval in minutes",
         default=1,
@@ -1145,6 +1179,11 @@ class CeleryScheduleTasksConfig(BaseSettings):
     TRIGGER_PROVIDER_SUBSCRIPTION_THRESHOLD_SECONDS: int = Field(
         description="Proactive subscription refresh threshold in seconds",
         default=60 * 60,
+    )
+
+    CONFLUENCE_RESYNC_INTERVAL_MINUTES: int = Field(
+        description="Interval in minutes for Confluence resync task, default 30 minutes",
+        default=30,
     )
 
 

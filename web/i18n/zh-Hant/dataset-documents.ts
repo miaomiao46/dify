@@ -13,6 +13,7 @@ const translation = {
         status: '狀態',
         action: '操作',
         chunkingMode: '分塊模式',
+        update: '自動更新',
       },
       name: '名字',
       rename: '重新命名',

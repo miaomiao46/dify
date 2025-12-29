@@ -98,6 +98,7 @@ dataset_detail_fields = {
     "total_available_documents": fields.Integer,
     "enable_api": fields.Boolean,
     "is_multimodal": fields.Boolean,
+    "auto_upgrade": fields.Boolean,
 }
 
 file_info_fields = {

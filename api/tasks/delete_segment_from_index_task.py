@@ -42,7 +42,8 @@ def delete_segment_from_index_task(
         doc_form = dataset_document.doc_form
 
         # Proceed with index cleanup using the index_node_ids directly
-        index_processor = IndexProcessorFactory(doc_form).init_index_processor()
+        config_options = dataset_document.external_index_processor_config
+        index_processor = IndexProcessorFactory(doc_form, config_options=config_options).init_index_processor()
         index_processor.clean(
             dataset,
             index_node_ids,

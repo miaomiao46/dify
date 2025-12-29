@@ -1,3 +1,5 @@
+from typing import Optional
+
 from pydantic import BaseModel, ConfigDict
 
 from models.dataset import Document
@@ -44,3 +46,4 @@ class ExtractSetting(BaseModel):
     website_info: WebsiteInfo | None = None
     document_model: str | None = None
     model_config = ConfigDict(arbitrary_types_allowed=True)
+    ocr_enable: Optional[bool] = False

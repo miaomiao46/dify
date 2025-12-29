@@ -1,3 +1,4 @@
+import logging
 import re
 import tempfile
 from pathlib import Path
@@ -16,6 +17,7 @@ from core.rag.extractor.html_extractor import HtmlExtractor
 from core.rag.extractor.jina_reader_extractor import JinaReaderWebExtractor
 from core.rag.extractor.markdown_extractor import MarkdownExtractor
 from core.rag.extractor.notion_extractor import NotionExtractor
+from core.rag.extractor.ocr_extractor import OcrExtractor
 from core.rag.extractor.pdf_extractor import PdfExtractor
 from core.rag.extractor.text_extractor import TextExtractor
 from core.rag.extractor.unstructured.unstructured_doc_extractor import UnstructuredWordExtractor
@@ -37,6 +39,8 @@ USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124"
     " Safari/537.36"
 )
+
+logger = logging.getLogger(__name__)
 
 
 class ExtractProcessor:
@@ -145,7 +149,15 @@ class ExtractProcessor:
                         # txt
                         extractor = TextExtractor(file_path, autodetect_encoding=True)
                 else:
-                    if file_extension in {".xlsx", ".xls"}:
+                    # todo: so far, only support pdf file ocr
+                    if extract_setting.ocr_enable and file_extension == ".pdf":
+                        extractor = OcrExtractor(
+                            file_path=file_path,
+                            upload_file_key=upload_file.key,
+                            tenant_id=upload_file.tenant_id,
+                            user_id=upload_file.created_by,
+                        )
+                    elif file_extension in {".xlsx", ".xls"}:
                         extractor = ExcelExtractor(file_path)
                     elif file_extension == ".pdf":
                         extractor = PdfExtractor(file_path)

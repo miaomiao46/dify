@@ -76,3 +76,10 @@ class AppTriggerType(StrEnum):
 
     # for backward compatibility
     UNKNOWN = "unknown"
+
+
+class DocMetadataField(StrEnum):
+    DOC_SOURCE = "doc_source"
+    PAGE_ID = "page_id"
+    DOC_HASH = "doc_hash"
+    AUTO_UPGRADE = "auto_upgrade"

@@ -49,6 +49,7 @@ from models.dataset import (
     Pipeline,
     SegmentAttachmentBinding,
 )
+from models.enums import DocMetadataField
 from models.model import UploadFile
 from models.provider_ids import ModelProviderID
 from models.source import DataSourceOauthBinding
@@ -410,6 +411,7 @@ class DatasetService:
 
         Args:
             dataset_id: The unique identifier of the dataset to update
+            data: Dictionary containing the update data
             data: Dictionary containing the update data
             user: The user performing the update operation
 
@@ -1120,6 +1122,7 @@ class DocumentService:
             "pre_processing_rules": [
                 {"id": "remove_extra_spaces", "enabled": True},
                 {"id": "remove_urls_emails", "enabled": False},
+                {"id": "enable_table_and_pic_recognition", "enabled": False},
             ],
             "segmentation": {"delimiter": "\n", "max_tokens": 1024, "chunk_overlap": 50},
         },
@@ -1278,6 +1281,48 @@ class DocumentService:
     }
 
     @staticmethod
+    def auto_update_document(file: UploadFile, document: Document):
+        """Confluence的file文件自动更新后, 同步要更新file关联的document信息, 并触发异步任务镜像文档索引更新"""
+        try:
+            # 更新文档的文件相关字段
+            doc_ext = document.data_source_info_dict or {}
+            doc_ext["upload_file_id"] = file.id
+            document.data_source_info = json.dumps(doc_ext)
+            document.word_count = 0  # indexing时由segment统计并累加
+            document.mime_type = file.mime_type
+            doc_metadata = copy.deepcopy(document.doc_metadata)
+            doc_metadata["doc_hash"] = file.hash
+            document.doc_metadata = doc_metadata
+            document.indexing_status = "waiting"
+            document.updated_at = datetime.datetime.now(datetime.UTC).replace(tzinfo=None)
+            # 提交数据库事务
+            db.session.add(document)
+            db.session.commit()
+            logging.info(f"Document {document.id} updated with file {file.id}.")
+            document_ids = []
+            document_ids.append(document.id)
+            # 触发异步任务进行文档索引更新
+            DocumentIndexingTaskProxy(document.tenant_id, document.dataset_id, document_ids).delay()
+
+        except Exception:
+            logging.exception(f"Failed to update document {document.id} with file {file.id}")
+            # 发生异常时，可以选择恢复文档状态，或者做其他异常处理
+            db.session.rollback()
+
+    @staticmethod
+    def get_documents_with_metadata():
+        """查询 doc_metadata 字段中 doc_source 为 'confluence' 的文档"""
+        documents = (
+            db.session.query(Document)
+            .filter(
+                Document.doc_metadata["doc_source"].astext == "confluence",
+                Document.doc_metadata["auto_upgrade"].astext == "true",
+            )
+            .all()
+        )
+        return documents
+
+    @staticmethod
     def get_document(dataset_id: str, document_id: str | None = None) -> Document | None:
         if document_id:
             document = (
@@ -1427,6 +1472,68 @@ class DocumentService:
         db.session.commit()
 
         return document
+
+    @staticmethod
+    def update_auto_upgrade_status(document_id: str, auto_upgrade: bool) -> Document:
+        document = db.session.query(Document).filter_by(id=document_id).first()
+
+        if not document:
+            raise ValueError("Document not found.")
+
+        if document.tenant_id != current_user.current_tenant_id:
+            raise ValueError("No permission.")
+
+        if not document.doc_metadata:
+            logging.info("Document does not have doc_metadata.")
+            return document
+
+        if "auto_upgrade" not in document.doc_metadata:
+            logging.info("Document does not have auto_upgrade field.")
+            return document
+
+        doc_metadata = copy.deepcopy(document.doc_metadata)
+        doc_metadata["auto_upgrade"] = auto_upgrade
+        document.doc_metadata = doc_metadata
+        db.session.add(document)
+        db.session.commit()
+
+        return document
+
+    @staticmethod
+    def update_auto_upgrade_status_batch(dataset_id: str, document_ids: list[str], auto_upgrade: bool):
+        dataset = DatasetService.get_dataset(dataset_id)
+        if not dataset:
+            raise ValueError("Dataset not found")
+
+        dataset.auto_upgrade = auto_upgrade
+        db.session.add(dataset)
+        db.session.commit()
+
+        if not document_ids:
+            return 0
+
+        documents = db.session.query(Document).filter(Document.id.in_(document_ids)).all()
+        updated_count = 0
+
+        for doc in documents:
+            if doc.tenant_id != current_user.current_tenant_id:
+                continue
+
+            if not doc.doc_metadata:
+                logging.info("Document does not have doc_metadata.")
+                continue
+
+            if "auto_upgrade" not in doc.doc_metadata:
+                logging.info("Document does not have auto_upgrade field.")
+                continue
+            doc_metadata = copy.deepcopy(doc.doc_metadata)
+            doc_metadata["auto_upgrade"] = auto_upgrade
+            doc.doc_metadata = doc_metadata
+            db.session.add(doc)
+            updated_count += 1
+
+        db.session.commit()
+        return None
 
     @staticmethod
     def pause_document(document):
@@ -1621,11 +1728,26 @@ class DocumentService:
                             dataset_process_rule = dataset.latest_process_rule
                             if not dataset_process_rule:
                                 raise ValueError("No process rule found.")
+                            logger.info(f"当前dataset的process rule为: {dataset_process_rule.rules_dict}\n")
                     elif process_rule.mode == "automatic":
+                        automatic_rules = copy.deepcopy(DatasetProcessRule.AUTOMATIC_RULES)
+
+                        # Check if process_rule has rules and pre_processing_rules
+                        if process_rule.rules and process_rule.rules.pre_processing_rules:
+                            # Look for ocr_recognition rule in knowledge_config
+                            for rule in process_rule.rules.pre_processing_rules:
+                                if rule.id == "enable_table_and_pic_recognition" and rule.enabled:
+                                    # Update the ocr_recognition enabled status in automatic_rules
+                                    for auto_rule in automatic_rules["pre_processing_rules"]:
+                                        if auto_rule["id"] == "enable_table_and_pic_recognition":
+                                            auto_rule["enabled"] = True
+                                            break
+                                    break
+
                         dataset_process_rule = DatasetProcessRule(
                             dataset_id=dataset.id,
                             mode=process_rule.mode,
-                            rules=json.dumps(DatasetProcessRule.AUTOMATIC_RULES),
+                            rules=json.dumps(automatic_rules),
                             created_by=account.id,
                         )
                     else:
@@ -1689,6 +1811,15 @@ class DocumentService:
                             data_source_info: dict[str, str | bool] = {
                                 "upload_file_id": file.id,
                             }
+                            extra_metadata = {}
+                            if file.file_metadata:
+                                file_metadata = file.file_metadata
+                                extra_metadata = {
+                                    "doc_source": file_metadata.get("upload_type", ""),
+                                    "page_id": file_metadata.get("confluence_page_id", ""),
+                                    "doc_hash": file_metadata.get("doc_hash", ""),
+                                    "auto_upgrade": False,
+                                }
                             document = documents_map.get(file.name)
                             if knowledge_config.duplicate and document:
                                 document.dataset_process_rule_id = dataset_process_rule.id
@@ -1716,6 +1847,10 @@ class DocumentService:
                                     account,
                                     file.name,
                                     batch,
+                                    split_strategy=knowledge_config.split_strategy.model_dump()
+                                    if knowledge_config.split_strategy
+                                    else None,
+                                    extra_metadata=extra_metadata,
                                 )
                                 db.session.add(document)
                                 db.session.flush()
@@ -1768,6 +1903,9 @@ class DocumentService:
                                         account,
                                         truncated_page_name,
                                         batch,
+                                        split_strategy=knowledge_config.split_strategy.model_dump()
+                                        if knowledge_config.split_strategy
+                                        else None,
                                     )
                                     db.session.add(document)
                                     db.session.flush()
@@ -1808,6 +1946,9 @@ class DocumentService:
                                 account,
                                 document_name,
                                 batch,
+                                split_strategy=knowledge_config.split_strategy.model_dump()
+                                if knowledge_config.split_strategy
+                                else None,
                             )
                             db.session.add(document)
                             db.session.flush()
@@ -2126,6 +2267,8 @@ class DocumentService:
         account: Account,
         name: str,
         batch: str,
+        split_strategy: dict | None = None,
+        extra_metadata: dict[str, Any] | None = None,
     ):
         document = Document(
             tenant_id=dataset.tenant_id,
@@ -2140,6 +2283,7 @@ class DocumentService:
             created_by=account.id,
             doc_form=document_form,
             doc_language=document_language,
+            split_strategy=json.dumps(split_strategy) if split_strategy else None,
         )
         doc_metadata = {}
         if dataset.built_in_field_enabled:
@@ -2150,6 +2294,8 @@ class DocumentService:
                 BuiltInField.last_update_date: datetime.datetime.now(datetime.UTC).strftime("%Y-%m-%d %H:%M:%S"),
                 BuiltInField.source: data_source_type,
             }
+        if extra_metadata:
+            doc_metadata |= extra_metadata
         if doc_metadata:
             document.doc_metadata = doc_metadata
         return document
@@ -2207,6 +2353,8 @@ class DocumentService:
                 db.session.add(dataset_process_rule)
                 db.session.commit()
                 document.dataset_process_rule_id = dataset_process_rule.id
+        # 构建 extra_metadata
+        extra_metadata = {}
         # update document data source
         if document_data.data_source:
             file_name = ""
@@ -2230,6 +2378,16 @@ class DocumentService:
                     data_source_info = {
                         "upload_file_id": file_id,
                     }
+
+                    if file.file_metadata:
+                        file_metadata = file.file_metadata
+                        extra_metadata = {
+                            DocMetadataField.doc_source: file_metadata.get("upload_type", ""),
+                            DocMetadataField.page_id: file_metadata.get("confluence_page_id", ""),
+                            DocMetadataField.doc_hash: file_metadata.get("doc_hash", ""),
+                            DocMetadataField.auto_upgrade: False,
+                        }
+
             elif document_data.data_source.info_list.data_source_type == "notion_import":
                 if not document_data.data_source.info_list.notion_info_list:
                     raise ValueError("No notion info list found.")
@@ -2277,6 +2435,9 @@ class DocumentService:
         # update document name
         if document_data.name:
             document.name = document_data.name
+        doc_metadata = document.doc_metadata or {}
+        doc_metadata.update(extra_metadata)
+        document.doc_metadata = doc_metadata
         # update document to be waiting
         document.indexing_status = "waiting"
         document.completed_at = None
@@ -2821,7 +2982,13 @@ class SegmentService:
             try:
                 keywords = args.get("keywords")
                 keywords_list = [keywords] if keywords is not None else None
-                VectorService.create_segments_vector(keywords_list, [segment_document], dataset, document.doc_form)
+                VectorService.create_segments_vector(
+                    keywords_list,
+                    [segment_document],
+                    dataset,
+                    document.doc_form,
+                    document.external_index_processor_config,
+                )
             except Exception as e:
                 logger.exception("create segment index failed")
                 segment_document.enabled = False
@@ -2911,7 +3078,11 @@ class SegmentService:
                 try:
                     # save vector index
                     VectorService.create_segments_vector(
-                        keywords_list, pre_segment_data_list, dataset, document.doc_form
+                        keywords_list,
+                        pre_segment_data_list,
+                        dataset,
+                        document.doc_form,
+                        document.external_index_processor_config,
                     )
                 except Exception as e:
                     logger.exception("create segment index failed")
@@ -3009,7 +3180,11 @@ class SegmentService:
                         VectorService.generate_child_chunks(
                             segment, document, dataset, embedding_model_instance, processing_rule, True
                         )
-                elif document.doc_form in (IndexStructureType.PARAGRAPH_INDEX, IndexStructureType.QA_INDEX):
+                elif document.doc_form in (
+                    IndexStructureType.PARAGRAPH_INDEX,
+                    IndexStructureType.QA_INDEX,
+                    IndexStructureType.EXTERNAL_INDEX,
+                ):
                     if args.enabled or keyword_changed:
                         # update segment vector index
                         VectorService.update_segment_vector(args.keywords, segment, dataset)
@@ -3084,7 +3259,11 @@ class SegmentService:
                         VectorService.generate_child_chunks(
                             segment, document, dataset, embedding_model_instance, processing_rule, True
                         )
-                elif document.doc_form in (IndexStructureType.PARAGRAPH_INDEX, IndexStructureType.QA_INDEX):
+                elif document.doc_form in (
+                    IndexStructureType.PARAGRAPH_INDEX,
+                    IndexStructureType.QA_INDEX,
+                    IndexStructureType.EXTERNAL_INDEX,
+                ):
                     # update segment vector index
                     VectorService.update_segment_vector(args.keywords, segment, dataset)
             # update multimodel vector index

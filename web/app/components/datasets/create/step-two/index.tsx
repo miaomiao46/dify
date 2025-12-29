@@ -7,7 +7,10 @@ import type { RetrievalConfig } from '@/types/app'
 import {
   RiAlertFill,
   RiArrowLeftLine,
+  RiExternalLinkLine,
+  RiGlobalLine,
   RiSearchEyeLine,
+  RiSettings4Line,
 } from '@remixicon/react'
 import { noop } from 'es-toolkit/compat'
 import Image from 'next/image'
@@ -43,6 +46,7 @@ import useBreakpoints, { MediaType } from '@/hooks/use-breakpoints'
 import { LanguagesSupported } from '@/i18n-config/language'
 import { DataSourceProvider } from '@/models/common'
 import { ChunkingMode, DataSourceType, ProcessMode } from '@/models/datasets'
+import { ExternalStrategyType, SplitStrategy } from '@/models/datasets'
 import { getNotionInfo, getWebsiteInfo, useCreateDocument, useCreateFirstDocument, useFetchDefaultProcessRule, useFetchFileIndexingEstimateForFile, useFetchFileIndexingEstimateForNotion, useFetchFileIndexingEstimateForWeb } from '@/service/knowledge/use-create-dataset'
 import { useInvalidDatasetList } from '@/service/knowledge/use-dataset'
 import { RETRIEVE_METHOD } from '@/types/app'
@@ -184,6 +188,12 @@ const StepTwo = ({
     return isAPIKeySet ? IndexingType.QUALIFIED : IndexingType.ECONOMICAL
   })
 
+  // External Split Strategy
+  const [strategyType, setStrategyType] = useState<SplitStrategy>(SplitStrategy.internal)
+  const [customStrategyUrl, setCustomStrategyUrl] = useState('')
+  const [externalSplitStrategyType, setExternalSplitStrategyType] = useState<ExternalStrategyType>(ExternalStrategyType.custom_service)
+  const [externalSplitStrategyApiKey, setExternalSplitStrategyApiKey] = useState('')
+
   const [previewFile, setPreviewFile] = useState<DocumentItem>(
     (datasetId && documentDetail)
       ? documentDetail.file
@@ -268,7 +278,7 @@ const StepTwo = ({
   }
 
   const fileIndexingEstimateQuery = useFetchFileIndexingEstimateForFile({
-    docForm: currentDocForm,
+    docForm: strategyType === SplitStrategy.external ? ChunkingMode.external : currentDocForm,
     docLanguage,
     dataSourceType: DataSourceType.FILE,
     files: previewFile
@@ -277,6 +287,14 @@ const StepTwo = ({
     indexingTechnique: getIndexing_technique() as any,
     processRule: getProcessRule(),
     dataset_id: datasetId!,
+    split_strategy: {
+      type: strategyType,
+      external_strategy_desc: strategyType === SplitStrategy.external ? {
+        url: customStrategyUrl,
+        type: externalSplitStrategyType,
+        api_key: externalSplitStrategyType === ExternalStrategyType.internal_workflow ? externalSplitStrategyApiKey : undefined,
+      } : undefined,
+    },
   })
   const notionIndexingEstimateQuery = useFetchFileIndexingEstimateForNotion({
     docForm: currentDocForm,
@@ -335,6 +353,9 @@ const StepTwo = ({
 
     if (key === 'remove_stopwords')
       return t('datasetCreation.stepTwo.removeStopwords')
+
+    if (key === 'enable_table_and_pic_recognition')
+      return t('datasetCreation.stepTwo.enableTableAndPicRecognition')
   }
   const ruleChangeHandle = (id: string) => {
     const newRules = rules.map((rule) => {
@@ -359,6 +380,12 @@ const StepTwo = ({
   }
 
   const updatePreview = () => {
+    if (rules.some(rule => rule.id === 'enable_table_and_pic_recognition' && rule.enabled)) {
+      Toast.notify({
+        type: 'info',
+        message: t('datasetCreation.stepTwo.ocrTipContent', '开启了表格和图片识别后，请您耐心等待OCR模型解析'),
+      })
+    }
     if (segmentationType === ProcessMode.general && maxChunkLength > MAXIMUM_CHUNK_TOKEN_LENGTH) {
       Toast.notify({ type: 'error', message: t('datasetCreation.stepTwo.maxLengthCheck', { limit: MAXIMUM_CHUNK_TOKEN_LENGTH }) })
       return
@@ -482,6 +509,16 @@ const StepTwo = ({
           websiteCrawlJobId,
           websitePages,
         })
+      }
+
+      if (strategyType === SplitStrategy.external) {
+        params.split_strategy = {
+          type: strategyType,
+          external_strategy_desc: {
+            url: customStrategyUrl,
+            type: ExternalStrategyType.custom_service,
+          },
+        }
       }
     }
     return params
@@ -617,275 +654,391 @@ const StepTwo = ({
     <div className="flex h-full w-full">
       <div className={cn('relative h-full w-1/2 overflow-y-auto py-6', isMobile ? 'px-4' : 'px-12')}>
         <div className="system-md-semibold mb-1 text-text-secondary">{t('datasetCreation.stepTwo.segmentation')}</div>
-        {((isInUpload && [ChunkingMode.text, ChunkingMode.qa].includes(currentDataset!.doc_form))
-          || isUploadInEmptyDataset
-          || isInInit)
-        && (
-          <OptionCard
-            className="mb-2 bg-background-section"
-            title={t('datasetCreation.stepTwo.general')}
-            icon={<Image width={20} height={20} src={SettingCog} alt={t('datasetCreation.stepTwo.general')} />}
-            activeHeaderClassName="bg-dataset-option-card-blue-gradient"
-            description={t('datasetCreation.stepTwo.generalTip')}
-            isActive={
-              [ChunkingMode.text, ChunkingMode.qa].includes(currentDocForm)
-            }
-            onSwitched={() =>
-              handleChangeDocform(ChunkingMode.text)}
-            actions={(
-              <>
-                <Button variant="secondary-accent" onClick={() => updatePreview()}>
-                  <RiSearchEyeLine className="mr-0.5 h-4 w-4" />
-                  {t('datasetCreation.stepTwo.previewChunk')}
-                </Button>
-                <Button variant="ghost" onClick={resetRules}>
-                  {t('datasetCreation.stepTwo.reset')}
-                </Button>
-              </>
-            )}
-            noHighlight={isInUpload && isNotUploadInEmptyDataset}
-          >
-            <div className="flex flex-col gap-y-4">
-              <div className="flex gap-3">
-                <DelimiterInput
-                  value={segmentIdentifier}
-                  onChange={e => setSegmentIdentifier(e.target.value, true)}
-                />
-                <MaxLengthInput
-                  unit="characters"
-                  value={maxChunkLength}
-                  onChange={setMaxChunkLength}
-                />
-                <OverlapInput
-                  unit="characters"
-                  value={overlap}
-                  min={1}
-                  onChange={setOverlap}
-                />
-              </div>
-              <div className="flex w-full flex-col">
-                <div className="flex items-center gap-x-2">
-                  <div className="inline-flex shrink-0">
-                    <TextLabel>{t('datasetCreation.stepTwo.rules')}</TextLabel>
-                  </div>
-                  <Divider className="grow" bgStyle="gradient" />
-                </div>
-                <div className="mt-1">
-                  {rules.map(rule => (
-                    <div
-                      key={rule.id}
-                      className={s.ruleItem}
-                      onClick={() => {
-                        ruleChangeHandle(rule.id)
-                      }}
-                    >
-                      <Checkbox
-                        checked={rule.enabled}
-                      />
-                      <label className="system-sm-regular ml-2 cursor-pointer text-text-secondary">{getRuleName(rule.id)}</label>
-                    </div>
-                  ))}
-                  {IS_CE_EDITION && (
+        {/* 新增：策略类型选择 */}
+        <div className='mb-4'>
+          <div className='flex items-center gap-x-2'>
+            <div className='inline-flex shrink-0'>
+              <TextLabel>{t('datasetCreation.stepTwo.strategyType')}</TextLabel>
+            </div>
+            <Divider className='grow' bgStyle='gradient' />
+          </div>
+          <div className='mt-2 flex gap-2'>
+            <RadioCard
+              className='flex-1'
+              icon={<RiSettings4Line className='h-4 w-4' />}
+              title={t('datasetCreation.stepTwo.builtInStrategy')}
+              description={t('datasetCreation.stepTwo.builtInStrategyTip')}
+              isChosen={strategyType === SplitStrategy.internal}
+              onChosen={() => {
+                setStrategyType(SplitStrategy.internal)
+                handleChangeDocform(ChunkingMode.text)
+              }}
+            />
+            <RadioCard
+              className='flex-1'
+              icon={<RiGlobalLine className='h-4 w-4' />}
+              title={t('datasetCreation.stepTwo.customStrategy')}
+              description={t('datasetCreation.stepTwo.customStrategyTip')}
+              isChosen={strategyType === SplitStrategy.external}
+              onChosen={() => {
+                setStrategyType(SplitStrategy.external)
+                handleChangeDocform(ChunkingMode.external)
+              }}
+            />
+          </div>
+        </div>
+
+        {/* 修改：添加条件渲染 */}
+        {strategyType === SplitStrategy.internal ? (
+          <>
+              {((isInUpload && [ChunkingMode.text, ChunkingMode.qa].includes(currentDataset!.doc_form))
+                || isUploadInEmptyDataset
+                || isInInit)
+              && (
+                <OptionCard
+                  className="mb-2 bg-background-section"
+                  title={t('datasetCreation.stepTwo.general')}
+                  icon={<Image width={20} height={20} src={SettingCog} alt={t('datasetCreation.stepTwo.general')} />}
+                  activeHeaderClassName="bg-dataset-option-card-blue-gradient"
+                  description={t('datasetCreation.stepTwo.generalTip')}
+                  isActive={
+                    [ChunkingMode.text, ChunkingMode.qa].includes(currentDocForm)
+                  }
+                  onSwitched={() =>
+                    handleChangeDocform(ChunkingMode.text)}
+                  actions={(
                     <>
-                      <Divider type="horizontal" className="my-4 bg-divider-subtle" />
-                      <div className="flex items-center py-0.5">
-                        <div
-                          className="flex items-center"
-                          onClick={() => {
-                            if (currentDataset?.doc_form)
-                              return
-                            if (docForm === ChunkingMode.qa)
-                              handleChangeDocform(ChunkingMode.text)
-                            else
-                              handleChangeDocform(ChunkingMode.qa)
-                          }}
-                        >
-                          <Checkbox
-                            checked={currentDocForm === ChunkingMode.qa}
-                            disabled={!!currentDataset?.doc_form}
-                          />
-                          <label className="system-sm-regular ml-2 cursor-pointer text-text-secondary">
-                            {t('datasetCreation.stepTwo.useQALanguage')}
-                          </label>
-                        </div>
-                        <LanguageSelect
-                          currentLanguage={docLanguage || locale}
-                          onSelect={setDocLanguage}
-                          disabled={currentDocForm !== ChunkingMode.qa}
-                        />
-                        <Tooltip popupContent={t('datasetCreation.stepTwo.QATip')} />
-                      </div>
-                      {currentDocForm === ChunkingMode.qa && (
-                        <div
-                          style={{
-                            background: 'linear-gradient(92deg, rgba(247, 144, 9, 0.1) 0%, rgba(255, 255, 255, 0.00) 100%)',
-                          }}
-                          className="mt-2 flex h-10 items-center gap-2 rounded-xl border border-components-panel-border px-3 text-xs shadow-xs backdrop-blur-[5px]"
-                        >
-                          <RiAlertFill className="size-4 text-text-warning-secondary" />
-                          <span className="system-xs-medium text-text-primary">
-                            {t('datasetCreation.stepTwo.QATip')}
-                          </span>
-                        </div>
-                      )}
+                      <Button variant="secondary-accent" onClick={() => updatePreview()}>
+                        <RiSearchEyeLine className="mr-0.5 h-4 w-4" />
+                        {t('datasetCreation.stepTwo.previewChunk')}
+                      </Button>
+                      <Button variant="ghost" onClick={resetRules}>
+                        {t('datasetCreation.stepTwo.reset')}
+                      </Button>
                     </>
                   )}
+                  noHighlight={isInUpload && isNotUploadInEmptyDataset}
+                >
+                  <div className="flex flex-col gap-y-4">
+                    <div className="flex gap-3">
+                      <DelimiterInput
+                        value={segmentIdentifier}
+                        onChange={e => setSegmentIdentifier(e.target.value, true)}
+                      />
+                      <MaxLengthInput
+                        unit="characters"
+                        value={maxChunkLength}
+                        onChange={setMaxChunkLength}
+                      />
+                      <OverlapInput
+                        unit="characters"
+                        value={overlap}
+                        min={1}
+                        onChange={setOverlap}
+                      />
+                    </div>
+                    <div className="flex w-full flex-col">
+                      <div className="flex items-center gap-x-2">
+                        <div className="inline-flex shrink-0">
+                          <TextLabel>{t('datasetCreation.stepTwo.rules')}</TextLabel>
+                        </div>
+                        <Divider className="grow" bgStyle="gradient" />
+                      </div>
+                      <div className="mt-1">
+                        {rules.map(rule => (
+                          <div
+                            key={rule.id}
+                            className={s.ruleItem}
+                            onClick={() => {
+                              ruleChangeHandle(rule.id)
+                            }}
+                          >
+                            <Checkbox
+                              checked={rule.enabled}
+                            />
+                            <label className="system-sm-regular ml-2 cursor-pointer text-text-secondary">{getRuleName(rule.id)}</label>
+                          </div>
+                        ))}
+                        {IS_CE_EDITION && (
+                          <>
+                            <Divider type="horizontal" className="my-4 bg-divider-subtle" />
+                            <div className="flex items-center py-0.5">
+                              <div
+                                className="flex items-center"
+                                onClick={() => {
+                                  if (currentDataset?.doc_form)
+                                    return
+                                  if (docForm === ChunkingMode.qa)
+                                    handleChangeDocform(ChunkingMode.text)
+                                  else
+                                    handleChangeDocform(ChunkingMode.qa)
+                                }}
+                              >
+                                <Checkbox
+                                  checked={currentDocForm === ChunkingMode.qa}
+                                  disabled={!!currentDataset?.doc_form}
+                                />
+                                <label className="system-sm-regular ml-2 cursor-pointer text-text-secondary">
+                                  {t('datasetCreation.stepTwo.useQALanguage')}
+                                </label>
+                              </div>
+                              <LanguageSelect
+                                currentLanguage={docLanguage || locale}
+                                onSelect={setDocLanguage}
+                                disabled={currentDocForm !== ChunkingMode.qa}
+                              />
+                              <Tooltip popupContent={t('datasetCreation.stepTwo.QATip')} />
+                            </div>
+                            {currentDocForm === ChunkingMode.qa && (
+                              <div
+                                style={{
+                                  background: 'linear-gradient(92deg, rgba(247, 144, 9, 0.1) 0%, rgba(255, 255, 255, 0.00) 100%)',
+                                }}
+                                className="mt-2 flex h-10 items-center gap-2 rounded-xl border border-components-panel-border px-3 text-xs shadow-xs backdrop-blur-[5px]"
+                              >
+                                <RiAlertFill className="size-4 text-text-warning-secondary" />
+                                <span className="system-xs-medium text-text-primary">
+                                  {t('datasetCreation.stepTwo.QATip')}
+                                </span>
+                              </div>
+                            )}
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </OptionCard>
+              )}
+              {
+                (
+                  (isInUpload && currentDataset!.doc_form === ChunkingMode.parentChild)
+                  || isUploadInEmptyDataset
+                  || isInInit
+                )
+                && (
+                  <OptionCard
+                    title={t('datasetCreation.stepTwo.parentChild')}
+                    icon={<ParentChildChunk className="h-[20px] w-[20px]" />}
+                    effectImg={BlueEffect.src}
+                    className="text-util-colors-blue-light-blue-light-500"
+                    activeHeaderClassName="bg-dataset-option-card-blue-gradient"
+                    description={t('datasetCreation.stepTwo.parentChildTip')}
+                    isActive={currentDocForm === ChunkingMode.parentChild}
+                    onSwitched={() => handleChangeDocform(ChunkingMode.parentChild)}
+                    actions={(
+                      <>
+                        <Button variant="secondary-accent" onClick={() => updatePreview()}>
+                          <RiSearchEyeLine className="mr-0.5 h-4 w-4" />
+                          {t('datasetCreation.stepTwo.previewChunk')}
+                        </Button>
+                        <Button variant="ghost" onClick={resetRules}>
+                          {t('datasetCreation.stepTwo.reset')}
+                        </Button>
+                      </>
+                    )}
+                    noHighlight={isInUpload && isNotUploadInEmptyDataset}
+                  >
+                    <div className="flex flex-col gap-4">
+                      <div>
+                        <div className="flex items-center gap-x-2">
+                          <div className="inline-flex shrink-0">
+                            <TextLabel>{t('datasetCreation.stepTwo.parentChunkForContext')}</TextLabel>
+                          </div>
+                          <Divider className="grow" bgStyle="gradient" />
+                        </div>
+                        <RadioCard
+                          className="mt-1"
+                          icon={<Image src={Note} alt="" />}
+                          title={t('datasetCreation.stepTwo.paragraph')}
+                          description={t('datasetCreation.stepTwo.paragraphTip')}
+                          isChosen={parentChildConfig.chunkForContext === 'paragraph'}
+                          onChosen={() => setParentChildConfig(
+                            {
+                              ...parentChildConfig,
+                              chunkForContext: 'paragraph',
+                            },
+                          )}
+                          chosenConfig={(
+                            <div className="flex gap-3">
+                              <DelimiterInput
+                                value={parentChildConfig.parent.delimiter}
+                                tooltip={t('datasetCreation.stepTwo.parentChildDelimiterTip')!}
+                                onChange={e => setParentChildConfig({
+                                  ...parentChildConfig,
+                                  parent: {
+                                    ...parentChildConfig.parent,
+                                    delimiter: e.target.value ? escape(e.target.value) : '',
+                                  },
+                                })}
+                              />
+                              <MaxLengthInput
+                                unit="characters"
+                                value={parentChildConfig.parent.maxLength}
+                                onChange={value => setParentChildConfig({
+                                  ...parentChildConfig,
+                                  parent: {
+                                    ...parentChildConfig.parent,
+                                    maxLength: value,
+                                  },
+                                })}
+                              />
+                            </div>
+                          )}
+                        />
+                        <RadioCard
+                          className="mt-2"
+                          icon={<Image src={FileList} alt="" />}
+                          title={t('datasetCreation.stepTwo.fullDoc')}
+                          description={t('datasetCreation.stepTwo.fullDocTip')}
+                          onChosen={() => setParentChildConfig(
+                            {
+                              ...parentChildConfig,
+                              chunkForContext: 'full-doc',
+                            },
+                          )}
+                          isChosen={parentChildConfig.chunkForContext === 'full-doc'}
+                        />
+                      </div>
+
+                      <div>
+                        <div className="flex items-center gap-x-2">
+                          <div className="inline-flex shrink-0">
+                            <TextLabel>{t('datasetCreation.stepTwo.childChunkForRetrieval')}</TextLabel>
+                          </div>
+                          <Divider className="grow" bgStyle="gradient" />
+                        </div>
+                        <div className="mt-1 flex gap-3">
+                          <DelimiterInput
+                            value={parentChildConfig.child.delimiter}
+                            tooltip={t('datasetCreation.stepTwo.parentChildChunkDelimiterTip')!}
+                            onChange={e => setParentChildConfig({
+                              ...parentChildConfig,
+                              child: {
+                                ...parentChildConfig.child,
+                                delimiter: e.target.value ? escape(e.target.value) : '',
+                              },
+                            })}
+                          />
+                          <MaxLengthInput
+                            unit="characters"
+                            value={parentChildConfig.child.maxLength}
+                            onChange={value => setParentChildConfig({
+                              ...parentChildConfig,
+                              child: {
+                                ...parentChildConfig.child,
+                                maxLength: value,
+                              },
+                            })}
+                          />
+                        </div>
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-x-2">
+                          <div className="inline-flex shrink-0">
+                            <TextLabel>{t('datasetCreation.stepTwo.rules')}</TextLabel>
+                          </div>
+                          <Divider className="grow" bgStyle="gradient" />
+                        </div>
+                        <div className="mt-1">
+                          {rules.map(rule => (
+                            <div
+                              key={rule.id}
+                              className={s.ruleItem}
+                              onClick={() => {
+                                ruleChangeHandle(rule.id)
+                              }}
+                            >
+                              <Checkbox
+                                checked={rule.enabled}
+                              />
+                              <label className="system-sm-regular ml-2 cursor-pointer text-text-secondary">{getRuleName(rule.id)}</label>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  </OptionCard>
+                )
+              }
+          </>
+        ) : (
+          /* 新增：自定义策略配置 */
+          <OptionCard
+            className='mb-2 bg-background-section'
+            title={t('datasetCreation.stepTwo.customStrategy')}
+            icon={<RiGlobalLine className='h-5 w-5' />}
+            activeHeaderClassName='bg-dataset-option-card-blue-gradient'
+            description={t('datasetCreation.stepTwo.customStrategyTip')}
+            isActive={true}
+            actions={
+              <>
+                <Button variant={'secondary-accent'} onClick={() => updatePreview()}>
+                  <RiSearchEyeLine className='mr-0.5 h-4 w-4' />
+                  {t('datasetCreation.stepTwo.previewChunk')}
+                </Button>
+              </>
+            }
+          >
+            <div className='flex flex-col gap-y-4'>
+              <div className='flex flex-col gap-2'>
+                <div className='flex items-center justify-between'>
+                  <TextLabel>{t('datasetCreation.stepTwo.customStrategyUrl')}</TextLabel>
+                  <Link
+                    href="http://agile.cffex.net/confluence/pages/viewpage.action?pageId=98469434"
+                    target='_blank'
+                    rel='noopener noreferrer'
+                    className='hover:text-text-accent-hover flex items-center text-xs text-text-accent'
+                  >
+                    <RiExternalLinkLine className='mr-0.5 h-3 w-3' />
+                    {t('datasetCreation.stepTwo.customStrategyDocsLearnMore')}
+                  </Link>
                 </div>
+                <input
+                  type="text"
+                  value={customStrategyUrl}
+                  onChange={e => setCustomStrategyUrl(e.target.value)}
+                  placeholder={t('datasetCreation.stepTwo.customStrategyUrlPlaceholder')}
+                  className='h-9 rounded-lg border border-components-panel-border bg-components-panel-bg px-3 text-sm'
+                />
+              </div>
+              <div className='flex flex-col gap-2'>
+                <div className='flex items-center py-0.5'>
+                  <div className='flex items-center' onClick={() => {
+                    if (strategyType !== SplitStrategy.external) {
+                      setExternalSplitStrategyType(
+                        externalSplitStrategyType === ExternalStrategyType.internal_workflow
+                          ? ExternalStrategyType.custom_service
+                          : ExternalStrategyType.internal_workflow,
+                      )
+                    }
+                  }}>
+                    <Checkbox
+                      checked={externalSplitStrategyType === ExternalStrategyType.internal_workflow}
+                      disabled={strategyType === SplitStrategy.external}
+                    />
+                    <label className={cn('system-sm-regular ml-2 cursor-pointer text-text-secondary',
+                      strategyType === SplitStrategy.external && 'cursor-not-allowed opacity-50')}>
+                      {t('datasetCreation.stepTwo.useInternalWorkflow')}
+                    </label>
+                  </div>
+                </div>
+                {externalSplitStrategyType === ExternalStrategyType.internal_workflow && (
+                  <div className='flex flex-col gap-2'>
+                    <TextLabel>{t('datasetCreation.stepTwo.apiKey')}</TextLabel>
+                    <input
+                      type="password"
+                      value={externalSplitStrategyApiKey}
+                      onChange={e => setExternalSplitStrategyApiKey(e.target.value)}
+                      placeholder={t('datasetCreation.stepTwo.apiKeyPlaceholder')}
+                      className='h-9 rounded-lg border border-components-panel-border bg-components-panel-bg px-3 text-sm'
+                      disabled={strategyType === SplitStrategy.external}
+                    />
+                  </div>
+                )}
               </div>
             </div>
           </OptionCard>
         )}
-        {
-          (
-            (isInUpload && currentDataset!.doc_form === ChunkingMode.parentChild)
-            || isUploadInEmptyDataset
-            || isInInit
-          )
-          && (
-            <OptionCard
-              title={t('datasetCreation.stepTwo.parentChild')}
-              icon={<ParentChildChunk className="h-[20px] w-[20px]" />}
-              effectImg={BlueEffect.src}
-              className="text-util-colors-blue-light-blue-light-500"
-              activeHeaderClassName="bg-dataset-option-card-blue-gradient"
-              description={t('datasetCreation.stepTwo.parentChildTip')}
-              isActive={currentDocForm === ChunkingMode.parentChild}
-              onSwitched={() => handleChangeDocform(ChunkingMode.parentChild)}
-              actions={(
-                <>
-                  <Button variant="secondary-accent" onClick={() => updatePreview()}>
-                    <RiSearchEyeLine className="mr-0.5 h-4 w-4" />
-                    {t('datasetCreation.stepTwo.previewChunk')}
-                  </Button>
-                  <Button variant="ghost" onClick={resetRules}>
-                    {t('datasetCreation.stepTwo.reset')}
-                  </Button>
-                </>
-              )}
-              noHighlight={isInUpload && isNotUploadInEmptyDataset}
-            >
-              <div className="flex flex-col gap-4">
-                <div>
-                  <div className="flex items-center gap-x-2">
-                    <div className="inline-flex shrink-0">
-                      <TextLabel>{t('datasetCreation.stepTwo.parentChunkForContext')}</TextLabel>
-                    </div>
-                    <Divider className="grow" bgStyle="gradient" />
-                  </div>
-                  <RadioCard
-                    className="mt-1"
-                    icon={<Image src={Note} alt="" />}
-                    title={t('datasetCreation.stepTwo.paragraph')}
-                    description={t('datasetCreation.stepTwo.paragraphTip')}
-                    isChosen={parentChildConfig.chunkForContext === 'paragraph'}
-                    onChosen={() => setParentChildConfig(
-                      {
-                        ...parentChildConfig,
-                        chunkForContext: 'paragraph',
-                      },
-                    )}
-                    chosenConfig={(
-                      <div className="flex gap-3">
-                        <DelimiterInput
-                          value={parentChildConfig.parent.delimiter}
-                          tooltip={t('datasetCreation.stepTwo.parentChildDelimiterTip')!}
-                          onChange={e => setParentChildConfig({
-                            ...parentChildConfig,
-                            parent: {
-                              ...parentChildConfig.parent,
-                              delimiter: e.target.value ? escape(e.target.value) : '',
-                            },
-                          })}
-                        />
-                        <MaxLengthInput
-                          unit="characters"
-                          value={parentChildConfig.parent.maxLength}
-                          onChange={value => setParentChildConfig({
-                            ...parentChildConfig,
-                            parent: {
-                              ...parentChildConfig.parent,
-                              maxLength: value,
-                            },
-                          })}
-                        />
-                      </div>
-                    )}
-                  />
-                  <RadioCard
-                    className="mt-2"
-                    icon={<Image src={FileList} alt="" />}
-                    title={t('datasetCreation.stepTwo.fullDoc')}
-                    description={t('datasetCreation.stepTwo.fullDocTip')}
-                    onChosen={() => setParentChildConfig(
-                      {
-                        ...parentChildConfig,
-                        chunkForContext: 'full-doc',
-                      },
-                    )}
-                    isChosen={parentChildConfig.chunkForContext === 'full-doc'}
-                  />
-                </div>
-
-                <div>
-                  <div className="flex items-center gap-x-2">
-                    <div className="inline-flex shrink-0">
-                      <TextLabel>{t('datasetCreation.stepTwo.childChunkForRetrieval')}</TextLabel>
-                    </div>
-                    <Divider className="grow" bgStyle="gradient" />
-                  </div>
-                  <div className="mt-1 flex gap-3">
-                    <DelimiterInput
-                      value={parentChildConfig.child.delimiter}
-                      tooltip={t('datasetCreation.stepTwo.parentChildChunkDelimiterTip')!}
-                      onChange={e => setParentChildConfig({
-                        ...parentChildConfig,
-                        child: {
-                          ...parentChildConfig.child,
-                          delimiter: e.target.value ? escape(e.target.value) : '',
-                        },
-                      })}
-                    />
-                    <MaxLengthInput
-                      unit="characters"
-                      value={parentChildConfig.child.maxLength}
-                      onChange={value => setParentChildConfig({
-                        ...parentChildConfig,
-                        child: {
-                          ...parentChildConfig.child,
-                          maxLength: value,
-                        },
-                      })}
-                    />
-                  </div>
-                </div>
-                <div>
-                  <div className="flex items-center gap-x-2">
-                    <div className="inline-flex shrink-0">
-                      <TextLabel>{t('datasetCreation.stepTwo.rules')}</TextLabel>
-                    </div>
-                    <Divider className="grow" bgStyle="gradient" />
-                  </div>
-                  <div className="mt-1">
-                    {rules.map(rule => (
-                      <div
-                        key={rule.id}
-                        className={s.ruleItem}
-                        onClick={() => {
-                          ruleChangeHandle(rule.id)
-                        }}
-                      >
-                        <Checkbox
-                          checked={rule.enabled}
-                        />
-                        <label className="system-sm-regular ml-2 cursor-pointer text-text-secondary">{getRuleName(rule.id)}</label>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            </OptionCard>
-          )
-        }
         <Divider className="my-5" />
         <div className="system-md-semibold mb-1 text-text-secondary">{t('datasetCreation.stepTwo.indexMode')}</div>
         <div className="flex items-center gap-2">
@@ -1208,6 +1361,20 @@ const StepTwo = ({
                       )
                     })}
                   </FormattedText>
+                </ChunkContainer>
+              )
+            })
+          )}
+          {/* 新增：外部策略预览 */}
+          {currentDocForm === ChunkingMode.external && estimate?.preview && (
+            estimate?.preview.map((item, index) => {
+              return (
+                <ChunkContainer
+                  key={item.content || `chunk-${index}`}
+                  label={`Chunk-${index + 1}`}
+                  characterCount={item.content?.length || 0}
+                >
+                  {item.content || '内容为空'}
                 </ChunkContainer>
               )
             })

@@ -1,5 +1,6 @@
 import json
 from typing import Self
+from urllib.parse import unquote
 from uuid import UUID
 
 from flask import request
@@ -36,6 +37,34 @@ from models.dataset import Dataset, Document, DocumentSegment
 from services.dataset_service import DatasetService, DocumentService
 from services.entities.knowledge_entities.knowledge_entities import KnowledgeConfig, ProcessRule, RetrievalModel
 from services.file_service import FileService
+
+
+def parse_rfc2231_filename(filename):
+    """
+    解析 RFC 2231 格式的文件名
+    格式: charset'lang'encoded_text
+    例如: UTF-8''66%E5%85%B3%E4%BA%8E...
+    """
+    if not filename:
+        return filename
+
+    # 检查是否是 RFC 2231 格式 (包含 '')
+    if "''" in filename:
+        try:
+            # 分割格式: encoding'language'encoded_filename
+            parts = filename.split("''", 1)
+            if len(parts) == 2:
+                encoding = parts[0]  # 通常是 'UTF-8'
+                encoded_filename = parts[1]
+                # URL 解码
+                decoded_filename = unquote(encoded_filename, encoding=encoding or "utf-8")
+                return decoded_filename
+        except Exception as e:
+            print(f"Error parsing RFC2231 filename: {e}")
+            return filename
+
+    # 如果不是 RFC 2231 格式，直接返回
+    return filename
 
 
 class DocumentTextCreatePayload(BaseModel):
@@ -312,14 +341,22 @@ class DocumentAddByFileApi(DatasetApiResource):
         if not file.filename:
             raise FilenameNotExistsError
 
+        raw_filename = file.filename
+        print(f"Raw filename: {raw_filename}")
+
+        # 解析文件名
+        correct_filename = parse_rfc2231_filename(raw_filename)
+        print(f"Correct filename: {correct_filename}")
+
         if not current_user:
             raise ValueError("current_user is required")
         upload_file = FileService(db.engine).upload_file(
-            filename=file.filename,
+            filename=correct_filename,
             content=file.read(),
             mimetype=file.mimetype,
             user=current_user,
             source="datasets",
+            used=True,
         )
         data_source = {
             "type": "upload_file",
@@ -328,6 +365,11 @@ class DocumentAddByFileApi(DatasetApiResource):
         args["data_source"] = data_source
         # validate args
         knowledge_config = KnowledgeConfig.model_validate(args)
+        if (
+            knowledge_config.split_strategy is not None
+            and knowledge_config.split_strategy.external_strategy_desc is not None
+        ):
+            knowledge_config.doc_form = "external_model"
         DocumentService.document_create_args_validate(knowledge_config)
 
         dataset_process_rule = dataset.latest_process_rule if "process_rule" not in args else None

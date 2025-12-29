@@ -12,12 +12,13 @@ import { useTranslation } from 'react-i18next'
 import Button from '@/app/components/base/button'
 import Input from '@/app/components/base/input'
 import Loading from '@/app/components/base/loading'
+import Switch from '@/app/components/base/switch'
 import IndexFailed from '@/app/components/datasets/common/document-status-with-action/index-failed'
 import { useDatasetDetailContextWithSelector } from '@/context/dataset-detail'
 import { useDocLink } from '@/context/i18n'
 import { useProviderContext } from '@/context/provider-context'
 import { DataSourceType } from '@/models/datasets'
-import { useDocumentList, useInvalidDocumentDetail, useInvalidDocumentList } from '@/service/knowledge/use-document'
+import { useDocumentList, useInvalidDocumentDetail, useInvalidDocumentList, useToggleAutoUpgradeBatch } from '@/service/knowledge/use-document'
 import { useChildSegmentListKey, useSegmentListKey } from '@/service/knowledge/use-segment'
 import { useInvalid } from '@/service/use-base'
 import { cn } from '@/utils/classnames'
@@ -112,12 +113,14 @@ const Documents: FC<IDocumentsProps> = ({ datasetId }) => {
 
   const router = useRouter()
   const dataset = useDatasetDetailContextWithSelector(s => s.dataset)
+  const toggleAutoUpgradeBatch = useToggleAutoUpgradeBatch()
   const [timerCanRun, setTimerCanRun] = useState(true)
   const isDataSourceNotion = dataset?.data_source_type === DataSourceType.NOTION
   const isDataSourceWeb = dataset?.data_source_type === DataSourceType.WEB
   const isDataSourceFile = dataset?.data_source_type === DataSourceType.FILE
   const embeddingAvailable = !!dataset?.embedding_available
   const debouncedSearchValue = useDebounce(searchValue, { wait: 500 })
+  const [globalUpdateEnable, setGlobalUpdateEnable] = useState<boolean | undefined>(undefined)
 
   const statusFilterItems: Item[] = useMemo(() => [
     { value: 'all', name: t('datasetDocuments.list.index.all') as string },
@@ -361,7 +364,20 @@ const Documents: FC<IDocumentsProps> = ({ datasetId }) => {
           <div className="flex !h-8 items-center justify-center gap-2">
             {!isFreePlan && <AutoDisabledDocument datasetId={datasetId} />}
             <IndexFailed datasetId={datasetId} />
-            {!embeddingAvailable && <StatusWithAction type="warning" description={t('dataset.embeddingModelNotAvailable')} />}
+            <div className="flex items-center mr-4">
+              <span className="text-sm mr-2">{t('dataset.patchAutoUpdate')}</span>
+              <Switch
+                value={globalUpdateEnable !== undefined ? globalUpdateEnable : dataset?.auto_upgrade}
+                onChange={async (checked) => {
+                  setGlobalUpdateEnable(checked)
+                    if (!documentsRes?.data || documentsRes.data.length === 0) return
+                    const updatedDocIds = documentsRes.data.map(doc => doc.id)
+                    await toggleAutoUpgradeBatch(datasetId, updatedDocIds, checked)
+                }}
+                size="md"
+              />
+            </div>
+            {!embeddingAvailable && <StatusWithAction type='warning' description={t('dataset.embeddingModelNotAvailable')} />}
             {embeddingAvailable && (
               <Button variant="secondary" className="shrink-0" onClick={showEditMetadataModal}>
                 <RiDraftLine className="mr-1 size-4" />
@@ -412,6 +428,8 @@ const Documents: FC<IDocumentsProps> = ({ datasetId }) => {
                     onChange: handlePageChange,
                   }}
                   onManageMetadata={showEditMetadataModal}
+                  globalUpdateEnable={globalUpdateEnable}
+                  setGlobalUpdateEnable={setGlobalUpdateEnable}
                 />
               )
             : (

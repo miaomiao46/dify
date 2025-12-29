@@ -1,5 +1,6 @@
 import base64
 import hashlib
+import json
 import os
 import uuid
 from typing import Literal, Union
@@ -19,7 +20,7 @@ from core.file import helpers as file_helpers
 from core.rag.extractor.extract_processor import ExtractProcessor
 from extensions.ext_storage import storage
 from libs.datetime_utils import naive_utc_now
-from libs.helper import extract_tenant_id
+from libs.helper import extract_tenant_id, generate_text_hash
 from models import Account
 from models.enums import CreatorUserRole
 from models.model import EndUser, UploadFile
@@ -49,6 +50,8 @@ class FileService:
         user: Union[Account, EndUser],
         source: Literal["datasets"] | None = None,
         source_url: str = "",
+        file_metadata: dict | None = None,
+        used: bool = False,
     ) -> UploadFile:
         # get file extension
         extension = os.path.splitext(filename)[1].lstrip(".").lower()
@@ -84,6 +87,11 @@ class FileService:
         # save file to storage
         storage.save(file_key, content)
 
+        if file_metadata is not None:
+            if isinstance(file_metadata, str):
+                file_metadata = json.loads(file_metadata)
+            doc_hash = generate_text_hash(content.decode("utf-8"))
+            file_metadata["doc_hash"] = doc_hash
         # save file to db
         upload_file = UploadFile(
             tenant_id=current_tenant_id or "",
@@ -96,9 +104,10 @@ class FileService:
             created_by_role=(CreatorUserRole.ACCOUNT if isinstance(user, Account) else CreatorUserRole.END_USER),
             created_by=user.id,
             created_at=naive_utc_now(),
-            used=False,
+            used=used,
             hash=hashlib.sha3_256(content).hexdigest(),
             source_url=source_url,
+            file_metadata=file_metadata,
         )
         # The `UploadFile` ID is generated within its constructor, so flushing to retrieve the ID is unnecessary.
         # We can directly generate the `source_url` here before committing.
@@ -253,3 +262,48 @@ class FileService:
                 return
             storage.delete(upload_file.key)
             session.delete(upload_file)
+
+    def get_file_by_file_id(self, tenant_id: str, file_id: str) -> UploadFile | None:
+        """根据租户id和文档id获取的文件对象"""
+        # 查询与文件关联的 UploadFile 对象
+        with self._session_maker(expire_on_commit=False) as session:
+            file: UploadFile | None = (
+                session.query(UploadFile).filter(UploadFile.tenant_id == tenant_id, UploadFile.id == file_id).first()
+            )
+            return file
+
+    def get_unused_files_by_tenant_and_user(self, tenant_id: str, user_id: str):
+        """
+        获取指定租户和用户创建的未使用文件列表
+
+        Args:
+            tenant_id: 租户ID
+            user_id: 用户ID
+
+        Returns:
+            未使用的文件列表
+        """
+
+        with self._session_maker(expire_on_commit=False) as session:
+            unused_files = (
+                session.query(UploadFile)
+                .where(UploadFile.tenant_id == tenant_id, UploadFile.created_by == user_id, UploadFile.used == False)
+                .all()
+            )
+
+        return unused_files
+
+    def mark_file_used(self, file_ids: list[str], tenant_id: str):
+        if file_ids is not None and len(file_ids) > 0:
+            with self._session_maker(expire_on_commit=False) as session:
+                file_details = (
+                    session.query(UploadFile)
+                    .filter(UploadFile.tenant_id == tenant_id, UploadFile.id.in_(file_ids))
+                    .all()
+                )
+
+                # mark file used
+                for file in file_details:
+                    file.used = True
+
+                session.commit()

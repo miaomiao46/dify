@@ -42,8 +42,10 @@ from models import DatasetProcessRule, Document, DocumentSegment, UploadFile
 from models.dataset import DocumentPipelineExecutionLog
 from services.dataset_service import DatasetService, DocumentService
 from services.entities.knowledge_entities.knowledge_entities import KnowledgeConfig, ProcessRule, RetrievalModel
+from services.file_service import FileService
 
 from ..app.error import (
+    FileMarkError,
     ProviderModelCurrentlyNotSupportError,
     ProviderNotInitializeError,
     ProviderQuotaExceededError,
@@ -104,6 +106,15 @@ class DocumentRenamePayload(BaseModel):
     name: str
 
 
+class DocumentAutoUpgrade(BaseModel):
+    auto_upgrade: bool
+
+
+class DocumentAutoUpgradeBatch(BaseModel):
+    auto_upgrade: bool
+    document_ids: list[str]
+
+
 register_schema_models(
     console_ns,
     KnowledgeConfig,
@@ -111,6 +122,8 @@ register_schema_models(
     RetrievalModel,
     DocumentRetryPayload,
     DocumentRenamePayload,
+    DocumentAutoUpgrade,
+    DocumentAutoUpgradeBatch,
 )
 
 
@@ -334,7 +347,7 @@ class DatasetDocumentListApi(Resource):
     @cloud_edition_billing_rate_limit_check("knowledge")
     @console_ns.expect(console_ns.models[KnowledgeConfig.__name__])
     def post(self, dataset_id):
-        current_user, _ = current_account_with_tenant()
+        current_user, tenant_id = current_account_with_tenant()
         dataset_id = str(dataset_id)
 
         dataset = DatasetService.get_dataset(dataset_id)
@@ -369,6 +382,27 @@ class DatasetDocumentListApi(Resource):
             raise ProviderQuotaExceededError()
         except ModelCurrentlyNotSupportError:
             raise ProviderModelCurrentlyNotSupportError()
+
+        try:
+            # 检查是否存在必要的键
+            if (
+                knowledge_config is not None
+                and knowledge_config.data_source is not None
+                and knowledge_config.data_source.info_list is not None
+                and knowledge_config.data_source.info_list.file_info_list is not None
+                and knowledge_config.data_source.info_list.file_info_list.file_ids is not None
+            ):
+                logging.info(
+                    f"files marked as used, filesIds ->{knowledge_config.data_source.info_list.file_info_list.file_ids}"
+                )
+                FileService(db.engine).mark_file_used(
+                    knowledge_config.data_source.info_list.file_info_list.file_ids, tenant_id=tenant_id
+                )
+            else:
+                logging.warning("file ids not exist")
+        except Exception:
+            logging.exception("mark file used error")
+            raise FileMarkError()
 
         return {"dataset": dataset, "documents": documents, "batch": batch}
 
@@ -413,6 +447,26 @@ class DatasetInitApi(Resource):
             raise Forbidden()
 
         knowledge_config = KnowledgeConfig.model_validate(console_ns.payload or {})
+        try:
+            # 检查是否存在必要的键
+            if (
+                knowledge_config is not None
+                and knowledge_config.data_source is not None
+                and knowledge_config.data_source.info_list is not None
+                and knowledge_config.data_source.info_list.file_info_list is not None
+                and knowledge_config.data_source.info_list.file_info_list.file_ids is not None
+            ):
+                logging.info(
+                    f"files marked as used, filesIds ->{knowledge_config.data_source.info_list.file_info_list.file_ids}"
+                )
+                FileService(db.engine).mark_file_used(
+                    knowledge_config.data_source.info_list.file_info_list.file_ids, tenant_id=current_tenant_id
+                )
+            else:
+                logging.warning("file ids not exist")
+        except Exception:
+            logging.exception("mark file used error")
+            raise FileMarkError()
         if knowledge_config.indexing_technique == "high_quality":
             if knowledge_config.embedding_model is None or knowledge_config.embedding_model_provider is None:
                 raise ValueError("embedding model and embedding model provider are required for high quality indexing.")
@@ -1117,6 +1171,46 @@ class DocumentRenameApi(DocumentResource):
             raise DocumentIndexingError("Cannot delete document during indexing.")
 
         return document
+
+
+@console_ns.route("/datasets/<uuid:dataset_id>/documents/<uuid:document_id>/auto_upgrade")
+class DocumentAutoUpgradeApi(DocumentResource):
+    @setup_required
+    @login_required
+    @account_initialization_required
+    @marshal_with(document_fields)
+    @console_ns.expect(console_ns.models[DocumentAutoUpgrade.__name__])
+    def post(self, dataset_id, document_id):
+        _, current_tenant_id = current_account_with_tenant()
+        dataset_id = str(dataset_id)
+        dataset = DatasetService.get_dataset(dataset_id)
+        if not dataset:
+            raise NotFound("Dataset not found.")
+        document_id = str(document_id)
+        document = DocumentService.get_document(dataset.id, document_id)
+        if not document:
+            raise NotFound("Document not found.")
+        if document.tenant_id != current_tenant_id:
+            raise Forbidden("No permission.")
+        payload = DocumentAutoUpgrade.model_validate(console_ns.payload or {})
+        DocumentService.update_auto_upgrade_status(document_id, payload.auto_upgrade)
+        return {"result": "success"}, 200
+
+
+@console_ns.route("/datasets/<uuid:dataset_id>/documents/auto_upgrade")
+class DocumentAutoUpgradeBatchApi(DocumentResource):
+    @setup_required
+    @login_required
+    @account_initialization_required
+    @console_ns.expect(console_ns.models[DocumentAutoUpgradeBatch.__name__])
+    def post(self, dataset_id):
+        dataset_id = str(dataset_id)
+        dataset = DatasetService.get_dataset(dataset_id)
+        if not dataset:
+            raise NotFound("Dataset not found.")
+        payload = DocumentAutoUpgradeBatch.model_validate(console_ns.payload or {})
+        DocumentService.update_auto_upgrade_status_batch(dataset_id, payload.document_ids, payload.auto_upgrade)
+        return {"result": "success"}, 200
 
 
 @console_ns.route("/datasets/<uuid:dataset_id>/documents/<uuid:document_id>/website-sync")

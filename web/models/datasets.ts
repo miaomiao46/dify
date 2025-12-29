@@ -24,7 +24,18 @@ export enum ChunkingMode {
   text = 'text_model', // General text
   qa = 'qa_model', // General QA
   parentChild = 'hierarchical_model', // Parent-Child
+  external = 'external_model',
   // graph = 'graph', // todo: Graph RAG
+}
+
+export enum SplitStrategy {
+  internal = 'internal',
+  external = 'external',
+}
+
+export enum ExternalStrategyType {
+  internal_workflow = 'internal_workflow',
+  custom_service = 'custom_service',
 }
 
 export type MetadataInDoc = {
@@ -87,6 +98,7 @@ export type DataSet = {
   runtime_mode: 'rag_pipeline' | 'general'
   enable_api: boolean // Indicates if the service API is enabled
   is_multimodal: boolean // Indicates if the dataset supports multimodal
+  auto_upgrade: boolean
 }
 
 export type ExternalAPIItem = {
@@ -136,6 +148,12 @@ export type CustomFile = File & {
   mime_type?: string
   created_by?: string
   created_at?: number
+  fileMetadata?: FileMetadata
+}
+
+export type FileMetadata = {
+  upload_type?: string
+  confluence_page_id?: string
 }
 
 export type DocumentItem = {
@@ -424,6 +442,7 @@ export type DocumentReq = {
   doc_form: ChunkingMode
   doc_language: string
   process_rule: ProcessRule
+  split_strategy?: SplitStrategyDetail
 }
 
 export type CreateDocumentReq = DocumentReq & {
@@ -431,6 +450,17 @@ export type CreateDocumentReq = DocumentReq & {
   retrieval_model: RetrievalConfig
   embedding_model: string
   embedding_model_provider: string
+}
+
+export type ExternalStrategyDesc = {
+  url: string
+  type: ExternalStrategyType
+  api_key?: string
+}
+
+export type SplitStrategyDetail = {
+  type: SplitStrategy
+  external_strategy_desc?: ExternalStrategyDesc
 }
 
 export type IndexingEstimateParams = DocumentReq & Partial<DataSource> & {
@@ -794,6 +824,7 @@ export const DOC_FORM_ICON_WITH_BG: Record<ChunkingMode | 'external', React.Comp
   [ChunkingMode.text]: General,
   [ChunkingMode.qa]: Qa,
   [ChunkingMode.parentChild]: ParentChild,
+  [ChunkingMode.external]: ExternalKnowledgeBase,
   // [ChunkingMode.graph]: Graph, // todo: Graph RAG
   external: ExternalKnowledgeBase,
 }
@@ -808,6 +839,7 @@ export const DOC_FORM_TEXT: Record<ChunkingMode, string> = {
   [ChunkingMode.text]: 'general',
   [ChunkingMode.qa]: 'qa',
   [ChunkingMode.parentChild]: 'parentChild',
+  [ChunkingMode.external]: 'external',
   // [ChunkingMode.graph]: 'graph', // todo: Graph RAG
 }
 

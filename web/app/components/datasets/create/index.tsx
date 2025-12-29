@@ -3,7 +3,7 @@ import type { NotionPage } from '@/models/common'
 import type { CrawlOptions, CrawlResultItem, createDocumentResponse, FileItem } from '@/models/datasets'
 import { produce } from 'immer'
 import * as React from 'react'
-import { useCallback, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import Loading from '@/app/components/base/loading'
 import { ACCOUNT_SETTING_TAB } from '@/app/components/header/account-setting/constants'
@@ -11,6 +11,7 @@ import { useDefaultModel } from '@/app/components/header/account-setting/model-p
 import { useDatasetDetailContextWithSelector } from '@/context/dataset-detail'
 import { useModalContextSelector } from '@/context/modal-context'
 import { DataSourceProvider } from '@/models/common'
+import type { CustomFile } from '@/models/datasets'
 import { DataSourceType } from '@/models/datasets'
 import { useGetDefaultDataSourceListAuth } from '@/service/use-datasource'
 import AppUnavailable from '../../base/app-unavailable'
@@ -19,6 +20,9 @@ import StepOne from './step-one'
 import StepThree from './step-three'
 import StepTwo from './step-two'
 import { TopBar } from './top-bar'
+import { useContext } from 'use-context-selector'
+import { ToastContext } from '@/app/components/base/toast'
+import { fetchUnusedFiles } from '@/service/datasets'
 
 type DatasetUpdateFormProps = {
   datasetId?: string
@@ -37,6 +41,7 @@ const DEFAULT_CRAWL_OPTIONS: CrawlOptions = {
 const DatasetUpdateForm = ({ datasetId }: DatasetUpdateFormProps) => {
   const { t } = useTranslation()
   const setShowAccountSettingModal = useModalContextSelector(state => state.setShowAccountSettingModal)
+  const { notify } = useContext(ToastContext)
   const datasetDetail = useDatasetDetailContextWithSelector(state => state.dataset)
   const { data: embeddingsDefaultModel } = useDefaultModel(ModelTypeEnum.textEmbedding)
 
@@ -45,13 +50,14 @@ const DatasetUpdateForm = ({ datasetId }: DatasetUpdateFormProps) => {
   const [indexingTypeCache, setIndexTypeCache] = useState('')
   const [retrievalMethodCache, setRetrievalMethodCache] = useState('')
   const [fileList, setFiles] = useState<FileItem[]>([])
-  const [result, setResult] = useState<createDocumentResponse | undefined>()
+  const [result, setResult] = useState<any>()
   const [notionPages, setNotionPages] = useState<NotionPage[]>([])
   const [notionCredentialId, setNotionCredentialId] = useState<string>('')
   const [websitePages, setWebsitePages] = useState<CrawlResultItem[]>([])
   const [crawlOptions, setCrawlOptions] = useState<CrawlOptions>(DEFAULT_CRAWL_OPTIONS)
   const [websiteCrawlProvider, setWebsiteCrawlProvider] = useState<DataSourceProvider>(DataSourceProvider.jinaReader)
   const [websiteCrawlJobId, setWebsiteCrawlJobId] = useState('')
+  const [initialUnusedFilesFetched, setInitialUnusedFilesFetched] = useState(false)
 
   const {
     data: dataSourceList,
@@ -101,6 +107,53 @@ const DatasetUpdateForm = ({ datasetId }: DatasetUpdateFormProps) => {
   const changeStep = useCallback((delta: number) => {
     setStep(step + delta)
   }, [step, setStep])
+
+  // 获取未使用的文件
+  const fetchUnusedFilesData = useCallback(async () => {
+    try {
+      const unusedFiles = await fetchUnusedFiles()
+      // 如果有未使用的文件，显示提示
+      if (unusedFiles && unusedFiles.length > 0) {
+        notify({
+          type: 'info',
+          message: t('datasetCreation.unusedFiles.message', { count: unusedFiles.length }),
+          duration: 5000,
+        })
+
+        // 将未使用的文件转换为FileItem格式
+        const unusedFileItems: FileItem[] = unusedFiles.map((file: CustomFile) => ({
+          fileID: file.id,
+          file: {
+            ...file,
+            id: file.id,
+            name: file.name,
+            size: file.size,
+            mime_type: file.mime_type,
+            extension: file.extension,
+          } as CustomFile,
+          progress: 100,
+        }))
+
+        // 函数式更新，确保基于最新的 fileList
+        setFiles((prevFiles) => {
+          const existingFileIds = prevFiles.map(item => item.fileID)
+          const newFileItems = unusedFileItems.filter(item => !existingFileIds.includes(item.fileID))
+          return [...prevFiles, ...newFileItems]
+        })
+      }
+    }
+    catch (error) {
+      console.error('获取未使用文件失败:', error)
+    }
+  }, [notify, t, setFiles])
+
+  // 当step变为1时或组件首次挂载时获取未使用文件
+  useEffect(() => {
+    if (step === 1 && !initialUnusedFilesFetched) {
+      fetchUnusedFilesData()
+      setInitialUnusedFilesFetched(true)
+    }
+  }, [step, initialUnusedFilesFetched, fetchUnusedFilesData])
 
   if (fetchingAuthedDataSourceListError)
     return <AppUnavailable code={500} unknownReason={t('datasetCreation.error.unavailable') as string} />

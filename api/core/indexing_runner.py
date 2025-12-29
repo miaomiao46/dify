@@ -5,7 +5,7 @@ import re
 import threading
 import time
 import uuid
-from typing import Any
+from typing import Any, Optional
 
 from flask import Flask, current_app
 from sqlalchemy import select
@@ -85,7 +85,11 @@ class IndexingRunner:
                 if not processing_rule:
                     raise ValueError("no process rule found")
                 index_type = requeried_document.doc_form
-                index_processor = IndexProcessorFactory(index_type).init_index_processor()
+                # dataset split strategy options
+                config_options = dataset_document.external_index_processor_config
+                index_processor = IndexProcessorFactory(
+                    index_type, config_options=config_options
+                ).init_index_processor()
                 # extract
                 text_docs = self._extract(index_processor, requeried_document, processing_rule.to_dict())
 
@@ -157,7 +161,8 @@ class IndexingRunner:
                 raise ValueError("no process rule found")
 
             index_type = requeried_document.doc_form
-            index_processor = IndexProcessorFactory(index_type).init_index_processor()
+            config_options = dataset_document.external_index_processor_config
+            index_processor = IndexProcessorFactory(index_type, config_options=config_options).init_index_processor()
             # extract
             text_docs = self._extract(index_processor, requeried_document, processing_rule.to_dict())
 
@@ -247,7 +252,8 @@ class IndexingRunner:
                         documents.append(document)
             # build index
             index_type = requeried_document.doc_form
-            index_processor = IndexProcessorFactory(index_type).init_index_processor()
+            config_options = dataset_document.external_index_processor_config
+            index_processor = IndexProcessorFactory(index_type, config_options=config_options).init_index_processor()
             self._load(
                 index_processor=index_processor,
                 dataset=dataset,
@@ -270,6 +276,7 @@ class IndexingRunner:
         doc_language: str = "English",
         dataset_id: str | None = None,
         indexing_technique: str = "economy",
+        split_strategy: Optional[str] = None,
     ) -> IndexingEstimate:
         """
         Estimate the indexing for the document.
@@ -282,6 +289,18 @@ class IndexingRunner:
             if count > batch_upload_limit:
                 raise ValueError(f"You have reached the batch upload limit of {batch_upload_limit}.")
 
+        external_strategy_desc = None
+        # set external strategy url
+        if split_strategy and isinstance(split_strategy, dict):
+            try:
+                external_strategy_desc = split_strategy.get("external_strategy_desc")
+            except Exception:
+                logging.exception("Failed to parse split_strategy")
+        # 创建 index_processor
+        index_type = doc_form
+        index_processor_config: dict[str, Any] = {}
+        if external_strategy_desc:
+            index_processor_config["server_address"] = external_strategy_desc.get("url")
         embedding_model_instance = None
         if dataset_id:
             dataset = db.session.query(Dataset).filter_by(id=dataset_id).first()
@@ -312,7 +331,9 @@ class IndexingRunner:
 
         total_segments = 0
         index_type = doc_form
-        index_processor = IndexProcessorFactory(index_type).init_index_processor()
+        index_processor = IndexProcessorFactory(
+            index_type, config_options=index_processor_config
+        ).init_index_processor()
         for extract_setting in extract_settings:
             # extract
             processing_rule = DatasetProcessRule(
@@ -370,6 +391,10 @@ class IndexingRunner:
         if dataset_document.data_source_type not in {"upload_file", "notion_import", "website_crawl"}:
             return []
 
+        logger.info(
+            f"index runner 中查询到的dataset: {dataset_document.dataset_id} 对应的process rule为：{process_rule}"
+        )
+
         data_source_info = dataset_document.data_source_info_dict
         text_docs = []
         if dataset_document.data_source_type == "upload_file":
@@ -383,7 +408,27 @@ class IndexingRunner:
                     datasource_type=DatasourceType.FILE,
                     upload_file=file_detail,
                     document_model=dataset_document.doc_form,
+                    ocr_enable=False,
                 )
+                if (
+                    process_rule
+                    and isinstance(process_rule, dict)
+                    and "rules" in process_rule
+                    and isinstance(process_rule.get("rules"), dict)
+                ):
+                    rules = process_rule["rules"]
+                    pre_processing_rules = rules.get("pre_processing_rules")
+
+                    if isinstance(pre_processing_rules, list):
+                        for rule in pre_processing_rules:
+                            if (
+                                isinstance(rule, dict)
+                                and rule.get("id") == "enable_table_and_pic_recognition"
+                                and hasattr(extract_setting, "ocr_enable")
+                            ):
+                                extract_setting.ocr_enable = bool(rule.get("enabled", False))
+                                break
+                logger.info("extract setting为: %s", extract_setting)
                 text_docs = index_processor.extract(extract_setting, process_rule_mode=process_rule["mode"])
         elif dataset_document.data_source_type == "notion_import":
             if (

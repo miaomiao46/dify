@@ -175,3 +175,19 @@ export const useDocumentBatchRetryIndex = () => {
     },
   })
 }
+
+export const useToggleAutoUpgrade = () => {
+  return async (datasetId: string, documentId: string, enable: boolean) => {
+    return post(`/datasets/${datasetId}/documents/${documentId}/auto_upgrade`, {
+      body: { auto_upgrade: enable },
+    })
+  }
+}
+
+export const useToggleAutoUpgradeBatch = () => {
+  return async (datasetId: string, documentIds: string[], enable: boolean) => {
+    return post(`/datasets/${datasetId}/documents/auto_upgrade`, {
+      body: { document_ids: documentIds, auto_upgrade: enable },
+    })
+  }
+}
