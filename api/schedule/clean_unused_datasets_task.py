@@ -138,7 +138,9 @@ def clean_unused_datasets_task():
                                     db.session.add(dataset_auto_disable_log)
 
                             # Remove index
-                            index_processor = IndexProcessorFactory(dataset.doc_form).init_index_processor()
+                            index_processor = IndexProcessorFactory(
+                                dataset.doc_form, skip_validate_split=True
+                            ).init_index_processor()
                             index_processor.clean(dataset, None)
 
                             # Update document

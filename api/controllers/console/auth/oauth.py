@@ -185,7 +185,7 @@ class OAuthCallback(Resource):
 
 class CustomOAuthCallback(Resource):
     def get(self, provider: str):
-        logging.info("OAuthCallback get provider: %s",provider)
+        logging.info("OAuthCallback get provider: %s", provider)
         OAUTH_PROVIDERS = get_oauth_providers()
         with current_app.app_context():
             oauth_provider = OAUTH_PROVIDERS.get(provider)
@@ -194,18 +194,15 @@ class CustomOAuthCallback(Resource):
 
         code = request.args.get("code")
         logging.info("OAuthCallback code: %s", code)
-        state = request.args.get("state")
-        invite_token = None
-        if state:
-            invite_token = state
+        request.args.get("state")
 
         try:
             token = oauth_provider.get_access_token(code)
             logging.info("OAuthCallback token: %s", token)
             dept = get_dept_from_token(token)
-            logging.info("OAuthCallback dept: %s", dept)
+            # logging.info("OAuthCallback dept: %s", dept)
             user_info = oauth_provider.get_user_info(token)
-            logging.info("OAuthCallback user_info: %s", user_info)
+            # logging.info("OAuthCallback user_info: %s", user_info)
 
             if user_info.name and user_info.name.startswith("wb"):
                 return {"error": "Permission denied"}, 400
@@ -229,7 +226,7 @@ class CustomOAuthCallback(Resource):
             tenant_name = dept + "'s Workspace"
             tenant = db.session.query(Tenant).filter(Tenant.name == tenant_name).first()
             if not tenant:
-                logging.error("OAuthCallback not tenant")
+                # logging.error("OAuthCallback not tenant")
                 return redirect(
                     f"{dify_config.CONSOLE_WEB_URL}/signin"
                     "?message=Workspace not found, please contact system admin to invite you to join in a workspace."

@@ -2,6 +2,7 @@ import hashlib
 import logging
 
 import app
+from extensions.ext_database import db
 from libs.helper import ConfluenceFetcher, ConfluencePageInfo
 from models.dataset import Document
 from services.account_service import AccountService
@@ -94,7 +95,7 @@ class ConfluenceResyncTask:
         try:
             # 调用 upload_file 上传文件
             current_user = self.account_service.load_user(last_file.created_by)
-            new_file = FileService.upload_file(
+            new_file = FileService(db.engine).upload_file(
                 filename=last_file.name,
                 content=page_info.content.encode("utf-8"),
                 mimetype=page_info.mimetype,
@@ -102,7 +103,7 @@ class ConfluenceResyncTask:
                 source=None,
             )
         except Exception as e:
-            logging.exception(f"Failed to upload new file for document {document.id}")
+            logging.exception(f"Failed to upload new file for document {document.id}, {e}")
             return None
 
         return new_file

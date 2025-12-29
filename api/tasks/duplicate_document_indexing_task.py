@@ -129,7 +129,10 @@ def _duplicate_document_indexing_task(dataset_id: str, document_ids: Sequence[st
             if document:
                 # clean old data
                 index_type = document.doc_form
-                index_processor = IndexProcessorFactory(index_type).init_index_processor()
+                config_options = document.external_index_processor_config
+                index_processor = IndexProcessorFactory(
+                    index_type, config_options=config_options
+                ).init_index_processor()
 
                 segments = db.session.scalars(
                     select(DocumentSegment).where(DocumentSegment.document_id == document_id)

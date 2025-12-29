@@ -44,7 +44,9 @@ def remove_document_from_index_task(document_id: str):
         if not dataset:
             raise Exception("Document has no dataset")
 
-        index_processor = IndexProcessorFactory(document.doc_form).init_index_processor()
+        index_processor = IndexProcessorFactory(
+            document.doc_form, document.external_index_processor_config
+        ).init_index_processor()
 
         segments = db.session.scalars(select(DocumentSegment).where(DocumentSegment.document_id == document.id)).all()
         index_node_ids = [segment.index_node_id for segment in segments]

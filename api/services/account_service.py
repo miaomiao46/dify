@@ -1283,16 +1283,18 @@ class RegisterService:
 
             TenantService.create_owner_tenant_if_not_exist(account=account, is_setup=True)
 
-            dify_setup = DifySetup(version=dify_config.project.version)
-            db.session.add(dify_setup)
+            dify_setup = db.session.query(DifySetup).first()
+            if not dify_setup:
+                dify_setup = DifySetup(version=dify_config.CURRENT_VERSION)
+                db.session.add(dify_setup)
             db.session.commit()
         except Exception as e:
-            db.session.query(DifySetup).delete()
-            db.session.query(TenantAccountJoin).delete()
-            db.session.query(Account).delete()
-            db.session.query(Tenant).delete()
-            db.session.commit()
-
+            # db.session.query(DifySetup).delete()
+            # db.session.query(TenantAccountJoin).delete()
+            # db.session.query(Account).delete()
+            # db.session.query(Tenant).delete()
+            # db.session.commit()
+            db.session.rollback()
             logger.exception("Setup account failed, email: %s, name: %s", email, name)
             raise ValueError(f"Setup failed: {e}")
 

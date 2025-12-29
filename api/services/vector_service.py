@@ -21,7 +21,12 @@ logger = logging.getLogger(__name__)
 class VectorService:
     @classmethod
     def create_segments_vector(
-        cls, keywords_list: list[list[str]] | None, segments: list[DocumentSegment], dataset: Dataset, doc_form: str
+        cls,
+        keywords_list: list[list[str]] | None,
+        segments: list[DocumentSegment],
+        dataset: Dataset,
+        doc_form: str,
+        config_options: dict,
     ):
         documents: list[Document] = []
         multimodal_documents: list[AttachmentDocument] = []
@@ -91,8 +96,9 @@ class VectorService:
                         },
                     )
                     multimodal_documents.append(multimodal_document)
-        index_processor: BaseIndexProcessor = IndexProcessorFactory(doc_form).init_index_processor()
-
+        index_processor: BaseIndexProcessor = IndexProcessorFactory(
+            doc_form, config_options=config_options
+        ).init_index_processor()
         if len(documents) > 0:
             index_processor.load(dataset, documents, None, with_keywords=True, keywords_list=keywords_list)
         if len(multimodal_documents) > 0:
@@ -138,7 +144,10 @@ class VectorService:
         processing_rule: DatasetProcessRule,
         regenerate: bool = False,
     ):
-        index_processor = IndexProcessorFactory(dataset.doc_form).init_index_processor()
+        config_options = dataset_document.external_index_processor_config
+        index_processor = IndexProcessorFactory(
+            dataset.doc_form, config_options=config_options, skip_validate_split=regenerate
+        ).init_index_processor()
         if regenerate:
             # delete child chunks
             index_processor.clean(dataset, [segment.index_node_id], with_keywords=True, delete_child_chunks=True)

@@ -616,6 +616,7 @@ class DatasetIndexingEstimateApi(Resource):
                 args["doc_language"],
                 args["dataset_id"],
                 args["indexing_technique"],
+                args["split_strategy"],
             )
         except LLMBadRequestError:
             raise ProviderNotInitializeError(

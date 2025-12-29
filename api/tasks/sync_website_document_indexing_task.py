@@ -22,7 +22,6 @@ def sync_website_document_indexing_task(dataset_id: str, document_id: str):
     Async process document
     :param dataset_id:
     :param document_id:
-
     Usage: sync_website_document_indexing_task.delay(dataset_id, document_id)
     """
     start_at = time.perf_counter()
@@ -62,7 +61,9 @@ def sync_website_document_indexing_task(dataset_id: str, document_id: str):
         return
     try:
         # clean old data
-        index_processor = IndexProcessorFactory(document.doc_form).init_index_processor()
+        index_processor = IndexProcessorFactory(
+            document.doc_form, document.external_index_processor_config
+        ).init_index_processor()
 
         segments = db.session.scalars(select(DocumentSegment).where(DocumentSegment.document_id == document_id)).all()
         if segments:
