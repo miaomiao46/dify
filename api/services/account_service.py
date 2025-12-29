@@ -1285,7 +1285,7 @@ class RegisterService:
 
             dify_setup = db.session.query(DifySetup).first()
             if not dify_setup:
-                dify_setup = DifySetup(version=dify_config.CURRENT_VERSION)
+                dify_setup = DifySetup(version=dify_config.project.version)
                 db.session.add(dify_setup)
             db.session.commit()
         except Exception as e:

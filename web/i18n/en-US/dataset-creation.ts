@@ -206,6 +206,7 @@ const translation = {
     apiKey: 'Dify Workflow API Key',
     apiKeyPlaceholder: 'Enter your Dify workflow API Key',
     customStrategyDocsLearnMore: 'Learn more',
+    enableTableAndPicRecognition: 'Enable table and image recognition',
   },
   stepThree: {
     creationTitle: '🎉 Knowledge created',

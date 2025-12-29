@@ -169,6 +169,19 @@ const Operations = ({
       {isListScene && !embeddingAvailable && (
         <Switch defaultValue={false} onChange={noop} disabled={true} size="md" />
       )}
+      {typeof autoUpdateValue === 'boolean' && onToggleAutoUpdate && (
+        <Tooltip popupContent={t('datasetDocuments.list.table.header.update')}>
+          <div>
+            <Switch
+              size="md"
+              value={autoUpdateValue}
+              disabled={autoUpdateDisabled}
+              onChange={onToggleAutoUpdate}
+            />
+          </div>
+        </Tooltip>
+      )}
+      <Divider className='!ml-4 !mr-2 !h-3' type='vertical' />
       {isListScene && embeddingAvailable && (
         <>
           {archived
@@ -184,19 +197,6 @@ const Operations = ({
               )
             : <Switch defaultValue={enabled} onChange={v => handleSwitch(v ? 'enable' : 'disable')} size="md" />}
           <Divider className="!ml-4 !mr-2 !h-3" type="vertical" />
-          {typeof autoUpdateValue === 'boolean' && onToggleAutoUpdate && (
-            <Tooltip popupContent={t('datasetDocuments.list.action.autoUpdate')}>
-              <div>
-                <Switch
-                  size="md"
-                  value={autoUpdateValue}
-                  disabled={autoUpdateDisabled}
-                  onChange={onToggleAutoUpdate}
-                />
-              </div>
-            </Tooltip>
-          )}
-          <Divider className='!ml-4 !mr-2 !h-3' type='vertical' />
         </>
       )}
       {embeddingAvailable && (
