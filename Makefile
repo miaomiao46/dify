@@ -1,8 +1,8 @@
 # Variables
-DOCKER_REGISTRY=kgpp34
+DOCKER_REGISTRY=cffexdify
 WEB_IMAGE=$(DOCKER_REGISTRY)/dify-web
 API_IMAGE=$(DOCKER_REGISTRY)/dify-api
-VERSION=1.11.0-alpha1
+VERSION=1.11.2
 
 # Default target - show help
 .DEFAULT_GOAL := help
