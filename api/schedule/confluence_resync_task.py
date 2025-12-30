@@ -14,7 +14,7 @@ class ConfluenceResyncTask:
     """定时检查 Confluence 页面是否更新，并上传文档的任务类"""
 
     def __init__(self):
-        self.file_service = FileService()
+        self.file_service = FileService(db.engine)
         self.document_service = DocumentService()
         self.confluence_fetcher = ConfluenceFetcher()
         self.account_service = AccountService()
