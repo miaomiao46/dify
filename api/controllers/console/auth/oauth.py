@@ -233,7 +233,7 @@ class CustomOAuthCallback(Resource):
                     "?message=Workspace not found, please contact system admin to invite you to join in a workspace."
                 )
             else:
-                TenantService.create_tenant_member(tenant, account, "normal")
+                TenantService.create_tenant_member(tenant, account, "editor")
                 TenantService.switch_tenant(account, tenant.id)
 
         if account.status == AccountStatus.PENDING:
