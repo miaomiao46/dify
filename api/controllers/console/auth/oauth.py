@@ -91,7 +91,7 @@ class OAuthLogin(Resource):
         return redirect(auth_url)
 
 
-@console_ns.route("/oauth/authorize/<provider>")
+# @console_ns.route("/oauth/authorize/<provider>")
 class OAuthCallback(Resource):
     @console_ns.doc("oauth_callback")
     @console_ns.doc(description="Handle OAuth callback and complete login process")
@@ -183,6 +183,7 @@ class OAuthCallback(Resource):
         return response
 
 
+@console_ns.route("/oauth/authorize/<provider>")
 class CustomOAuthCallback(Resource):
     def get(self, provider: str):
         logging.info("OAuthCallback get provider: %s", provider)
