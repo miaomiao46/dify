@@ -35,6 +35,10 @@ server {
       include proxy.conf;
     }
 
+    location /confluence2md {
+      proxy_pass ${NGINX_CONFLUENCE_TO_MARKDOWN_SERVER}
+    }
+
     location / {
       proxy_pass http://web:3000;
       include proxy.conf;
