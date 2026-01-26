@@ -11,9 +11,8 @@ from typing import Any, Literal, cast
 
 import sqlalchemy as sa
 from redis.exceptions import LockNotOwnedError
-from sqlalchemy import exists, func, select, cast
+from sqlalchemy import cast, exists, func, select, text
 from sqlalchemy.orm import Session
-from sqlalchemy.types import String as SQLString
 from werkzeug.exceptions import NotFound
 
 from configs import dify_config
@@ -1316,9 +1315,10 @@ class DocumentService:
         documents = (
             db.session.query(Document)
             .filter(
-                cast(Document.doc_metadata["doc_source"], SQLString) == "confluence",
-                cast(Document.doc_metadata["auto_upgrade"], SQLString) == "true",
+                text("doc_metadata ->> 'doc_source' = :source"),
+                text("doc_metadata ->> 'auto_upgrade' = :upgrade")
             )
+            .params(source="confluence", upgrade="true")
             .all()
         )
         return documents
