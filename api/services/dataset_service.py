@@ -1284,6 +1284,8 @@ class DocumentService:
     def auto_update_document(file: UploadFile, document: Document):
         """Confluence的file文件自动更新后, 同步要更新file关联的document信息, 并触发异步任务镜像文档索引更新"""
         try:
+            # 重新绑定 document 到当前 session，避免 "Instance is not bound to a session" 错误
+            document = db.session.merge(document)
             # 更新文档的文件相关字段
             doc_ext = document.data_source_info_dict or {}
             doc_ext["upload_file_id"] = file.id
