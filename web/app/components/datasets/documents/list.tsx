@@ -17,6 +17,7 @@ import { useTranslation } from 'react-i18next'
 import Checkbox from '@/app/components/base/checkbox'
 import NotionIcon from '@/app/components/base/notion-icon'
 import Pagination from '@/app/components/base/pagination'
+import Switch from '@/app/components/base/switch'
 import Toast from '@/app/components/base/toast'
 import Tooltip from '@/app/components/base/tooltip'
 import { normalizeStatusForQuery } from '@/app/components/datasets/documents/status-filter'
@@ -487,23 +488,18 @@ const DocumentList: FC<IDocumentListProps> = ({
                   <td>
                     <StatusItem status={doc.display_status} />
                   </td>
-                  <td>
-                    <Operations
-                      selectedIds={selectedIds}
-                      onSelectedIdChange={onSelectedIdChange}
-                      embeddingAvailable={embeddingAvailable}
-                      datasetId={datasetId}
-                      detail={pick(doc, ['name', 'enabled', 'archived', 'id', 'data_source_type', 'doc_form', 'display_status'])}
-                      onUpdate={onUpdate}
-                      autoUpdateValue={
+                  <td onClick={e => e.stopPropagation()}>
+                    <Switch
+                      size="md"
+                      defaultValue={
                         !doc.doc_metadata?.some((item: any) => item.name === 'doc_metadata')
                           ? false
                           : (autoUpdateMap[doc.id] ?? false)
                       }
-                      autoUpdateDisabled={
+                      disabled={
                         !doc.doc_metadata?.some((item: any) => item.name === 'doc_metadata')
                       }
-                      onToggleAutoUpdate={async (v) => {
+                      onChange={async (v) => {
                         globalUpdateEnable = undefined
 
                         setAutoUpdateMap(prev => ({ ...prev, [doc.id]: v }))
@@ -519,7 +515,23 @@ const DocumentList: FC<IDocumentListProps> = ({
                             message: t('common.actionMsg.modifiedUnsuccessfully'),
                           })
                         }
+                        else {
+                          Toast.notify({
+                            type: 'success',
+                            message: t('common.actionMsg.modifiedSuccessfully'),
+                          })
+                        }
                       }}
+                    />
+                  </td>
+                  <td>
+                    <Operations
+                      selectedIds={selectedIds}
+                      onSelectedIdChange={onSelectedIdChange}
+                      embeddingAvailable={embeddingAvailable}
+                      datasetId={datasetId}
+                      detail={pick(doc, ['name', 'enabled', 'archived', 'id', 'data_source_type', 'doc_form', 'display_status'])}
+                      onUpdate={onUpdate}
                     />
                   </td>
                 </tr>

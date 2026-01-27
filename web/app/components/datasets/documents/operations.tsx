@@ -57,9 +57,6 @@ type OperationsProps = {
   onUpdate: (operationName?: string) => void
   scene?: 'list' | 'detail'
   className?: string
-  autoUpdateValue?: boolean
-  autoUpdateDisabled?: boolean
-  onToggleAutoUpdate?: (v: boolean) => Promise<void>
 }
 
 const Operations = ({
@@ -71,9 +68,6 @@ const Operations = ({
   onUpdate,
   scene = 'list',
   className = '',
-  autoUpdateValue,
-  autoUpdateDisabled,
-  onToggleAutoUpdate,
 }: OperationsProps) => {
   const { id, enabled = false, archived = false, data_source_type, display_status } = detail || {}
   const [showModal, setShowModal] = useState(false)
@@ -169,19 +163,6 @@ const Operations = ({
       {isListScene && !embeddingAvailable && (
         <Switch defaultValue={false} onChange={noop} disabled={true} size="md" />
       )}
-      {typeof autoUpdateValue === 'boolean' && onToggleAutoUpdate && (
-        <Tooltip popupContent={t('datasetDocuments.list.table.header.update')}>
-          <div>
-            <Switch
-              size="md"
-              value={autoUpdateValue}
-              disabled={autoUpdateDisabled}
-              onChange={onToggleAutoUpdate}
-            />
-          </div>
-        </Tooltip>
-      )}
-      <Divider className='!ml-4 !mr-2 !h-3' type='vertical' />
       {isListScene && embeddingAvailable && (
         <>
           {archived

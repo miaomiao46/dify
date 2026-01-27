@@ -39,7 +39,7 @@ ENV APP_WEB_URL=http://127.0.0.1:3000
 EXPOSE 5001
 
 # set timezone
-ENV TZ=UTC
+ENV TZ=Asia/Shanghai
 
 # Set UTF-8 locale
 ENV LANG=en_US.UTF-8

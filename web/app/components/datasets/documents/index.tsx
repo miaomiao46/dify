@@ -13,6 +13,7 @@ import Button from '@/app/components/base/button'
 import Input from '@/app/components/base/input'
 import Loading from '@/app/components/base/loading'
 import Switch from '@/app/components/base/switch'
+import Toast from '@/app/components/base/toast'
 import IndexFailed from '@/app/components/datasets/common/document-status-with-action/index-failed'
 import { useDatasetDetailContextWithSelector } from '@/context/dataset-detail'
 import { useDocLink } from '@/context/i18n'
@@ -21,6 +22,7 @@ import { DataSourceType } from '@/models/datasets'
 import { useDocumentList, useInvalidDocumentDetail, useInvalidDocumentList, useToggleAutoUpgradeBatch } from '@/service/knowledge/use-document'
 import { useChildSegmentListKey, useSegmentListKey } from '@/service/knowledge/use-segment'
 import { useInvalid } from '@/service/use-base'
+import { asyncRunSafe } from '@/utils'
 import { cn } from '@/utils/classnames'
 import Chip from '../../base/chip'
 import Sort from '../../base/sort'
@@ -370,9 +372,25 @@ const Documents: FC<IDocumentsProps> = ({ datasetId }) => {
                 value={globalUpdateEnable !== undefined ? globalUpdateEnable : dataset?.auto_upgrade}
                 onChange={async (checked) => {
                   setGlobalUpdateEnable(checked)
-                    if (!documentsRes?.data || documentsRes.data.length === 0) return
-                    const updatedDocIds = documentsRes.data.map(doc => doc.id)
-                    await toggleAutoUpgradeBatch(datasetId, updatedDocIds, checked)
+                  if (!documentsRes?.data || documentsRes.data.length === 0)
+                    return
+                  const updatedDocIds = documentsRes.data.map(doc => doc.id)
+                  const [error] = await asyncRunSafe(
+                    toggleAutoUpgradeBatch(datasetId, updatedDocIds, checked) 
+                  )
+                  if (error) {
+                    setGlobalUpdateEnable(!checked)
+                    Toast.notify({
+                      type: 'error',
+                      message: t('common.actionMsg.modifiedUnsuccessfully'),
+                    })
+                  }
+                  else {
+                    Toast.notify({
+                      type: 'success',
+                      message: t('common.actionMsg.modifiedSuccessfully'),
+                    })
+                  }
                 }}
                 size="md"
               />
