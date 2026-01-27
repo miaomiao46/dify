@@ -23,7 +23,7 @@ import Tooltip from '@/app/components/base/tooltip'
 import { normalizeStatusForQuery } from '@/app/components/datasets/documents/status-filter'
 import { extensionToFileType } from '@/app/components/datasets/hit-testing/utils/extension-to-file-type'
 import EditMetadataBatchModal from '@/app/components/datasets/metadata/edit-metadata-batch/modal'
-import { useDatasetDetailContextWithSelector as useDatasetDetailContext } from '@/context/dataset-detail'
+import { useDatasetDetailContextWithSelector as useDatasetDetailContext, useDatasetDetailContextWithSelector } from '@/context/dataset-detail'
 import useTimestamp from '@/hooks/use-timestamp'
 import { ChunkingMode, DataSourceType, DocumentActionType } from '@/models/datasets'
 import { DatasourceType } from '@/models/pipeline'
@@ -89,6 +89,7 @@ const DocumentList: FC<IDocumentListProps> = ({
   statusFilterValue,
   remoteSortValue,
   globalUpdateEnable,
+  setGlobalUpdateEnable,
 }) => {
   const { t } = useTranslation()
   const { formatTime } = useTimestamp()
@@ -101,6 +102,7 @@ const DocumentList: FC<IDocumentListProps> = ({
   const [sortField, setSortField] = useState<'name' | 'word_count' | 'hit_count' | 'created_at' | null>(null)
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
   const toggleAutoUpgrade = useToggleAutoUpgrade()
+  const mutateDatasetRes = useDatasetDetailContextWithSelector(s => s.mutateDatasetRes)
 
   useEffect(() => {
     setSortField(null)
@@ -115,15 +117,19 @@ const DocumentList: FC<IDocumentListProps> = ({
         (item: any) => item.name === 'doc_metadata'
       )?.value
 
-      const docValue =
-        String(rawValue ?? '')
-          .match(/auto_upgrade['"]?\s*:\s*(True|False)/i)
-          ?.[1]
-          ?.toLowerCase() === 'true'
+      // rawValue 可能是字符串（Python dict repr）或对象
+      let docValue = false
+      if (typeof rawValue === 'string') {
+        // 解析字符串格式: "'auto_upgrade': True" 或 "'auto_upgrade': False"
+        docValue = /['"]?auto_upgrade['"]?\s*:\s*True/i.test(rawValue)
+      }
+      else if (typeof rawValue === 'object' && rawValue !== null) {
+        docValue = rawValue.auto_upgrade === true || rawValue.auto_upgrade === 'true'
+      }
 
       return {
         ...acc,
-        [doc.id]: docValue ?? false
+        [doc.id]: docValue
       }
     }, {} as Record<string, boolean>)
 
@@ -491,16 +497,12 @@ const DocumentList: FC<IDocumentListProps> = ({
                   <td onClick={e => e.stopPropagation()}>
                     <Switch
                       size="md"
-                      defaultValue={
-                        !doc.doc_metadata?.some((item: any) => item.name === 'doc_metadata')
-                          ? false
-                          : (autoUpdateMap[doc.id] ?? false)
-                      }
+                      value={autoUpdateMap[doc.id] ?? false}
                       disabled={
                         !doc.doc_metadata?.some((item: any) => item.name === 'doc_metadata')
                       }
                       onChange={async (v) => {
-                        globalUpdateEnable = undefined
+                        setGlobalUpdateEnable(undefined)
 
                         setAutoUpdateMap(prev => ({ ...prev, [doc.id]: v }))
 
@@ -520,6 +522,7 @@ const DocumentList: FC<IDocumentListProps> = ({
                             type: 'success',
                             message: t('common.actionMsg.modifiedSuccessfully'),
                           })
+                          mutateDatasetRes?.()
                         }
                       }}
                     />

@@ -115,6 +115,7 @@ const Documents: FC<IDocumentsProps> = ({ datasetId }) => {
 
   const router = useRouter()
   const dataset = useDatasetDetailContextWithSelector(s => s.dataset)
+  const mutateDatasetRes = useDatasetDetailContextWithSelector(s => s.mutateDatasetRes)
   const toggleAutoUpgradeBatch = useToggleAutoUpgradeBatch()
   const [timerCanRun, setTimerCanRun] = useState(true)
   const isDataSourceNotion = dataset?.data_source_type === DataSourceType.NOTION
@@ -390,6 +391,8 @@ const Documents: FC<IDocumentsProps> = ({ datasetId }) => {
                       type: 'success',
                       message: t('common.actionMsg.modifiedSuccessfully'),
                     })
+                    mutateDatasetRes?.()
+                    setGlobalUpdateEnable(undefined)
                   }
                 }}
                 size="md"
