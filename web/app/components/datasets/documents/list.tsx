@@ -102,7 +102,6 @@ const DocumentList: FC<IDocumentListProps> = ({
   const [sortField, setSortField] = useState<'name' | 'word_count' | 'hit_count' | 'created_at' | null>(null)
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
   const toggleAutoUpgrade = useToggleAutoUpgrade()
-  const mutateDatasetRes = useDatasetDetailContextWithSelector(s => s.mutateDatasetRes)
 
   useEffect(() => {
     setSortField(null)
@@ -522,7 +521,7 @@ const DocumentList: FC<IDocumentListProps> = ({
                             type: 'success',
                             message: t('common.actionMsg.modifiedSuccessfully'),
                           })
-                          mutateDatasetRes?.()
+                          onUpdate()
                         }
                       }}
                     />

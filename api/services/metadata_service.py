@@ -210,6 +210,9 @@ class MetadataService:
                     doc_metadata = copy.deepcopy(document.doc_metadata) if document.doc_metadata else {}
                 else:
                     doc_metadata = {}
+                    for key in ['page_id', 'doc_hash', 'doc_source', 'auto_upgrade']:
+                        if key in document.doc_metadata:
+                            doc_metadata[key] = document.doc_metadata[key]
                 for metadata_value in operation.metadata_list:
                     doc_metadata[metadata_value.name] = metadata_value.value
                 if dataset.built_in_field_enabled:
