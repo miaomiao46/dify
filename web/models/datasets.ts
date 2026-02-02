@@ -5,6 +5,7 @@ import type { IndexingType } from '@/app/components/datasets/create/step-two'
 import type { MetadataItemWithValue } from '@/app/components/datasets/metadata/types'
 import type { MetadataFilteringVariableType } from '@/app/components/workflow/nodes/knowledge-retrieval/types'
 import type { AppIconType, AppModeEnum, RetrievalConfig, TransferMethod } from '@/types/app'
+import type { I18nKeysByPrefix } from '@/types/i18n'
 import { ExternalKnowledgeBase, General, ParentChild, Qa } from '@/app/components/base/icons/src/public/knowledge/dataset-card'
 import { GeneralChunk, ParentChildChunk, QuestionAndAnswer } from '@/app/components/base/icons/src/vender/knowledge'
 
@@ -50,6 +51,13 @@ export type IconInfo = {
   icon_background?: string
   icon_type: AppIconType
   icon_url?: string
+}
+
+export type SummaryIndexSetting = {
+  enable?: boolean
+  model_name?: string
+  model_provider_name?: string
+  summary_prompt?: string
 }
 
 export type DataSet = {
@@ -99,6 +107,7 @@ export type DataSet = {
   enable_api: boolean // Indicates if the service API is enabled
   is_multimodal: boolean // Indicates if the dataset supports multimodal
   auto_upgrade: boolean
+  summary_index_setting?: SummaryIndexSetting
 }
 
 export type ExternalAPIItem = {
@@ -242,7 +251,7 @@ export type IndexingEstimateResponse = {
   total_price: number
   currency: string
   total_segments: number
-  preview: Array<{ content: string, child_chunks: string[] }>
+  preview: Array<{ content: string, child_chunks: string[], summary?: string }>
   qa_preview?: QA[]
 }
 
@@ -279,6 +288,7 @@ export type ProcessRuleResponse = {
   mode: ProcessMode
   rules: Rules
   limits: Limits
+  summary_index_setting?: SummaryIndexSetting
 }
 
 export type Rules = {
@@ -409,6 +419,7 @@ export type InitialDocumentDetail = {
   total_segments?: number
   doc_form: ChunkingMode
   doc_language: string
+  summary_index_status?: string
 }
 
 export type SimpleDocumentDetail = InitialDocumentDetail & {
@@ -443,6 +454,7 @@ export type DocumentReq = {
   doc_language: string
   process_rule: ProcessRule
   split_strategy?: SplitStrategyDetail
+  summary_index_setting?: SummaryIndexSetting
 }
 
 export type CreateDocumentReq = DocumentReq & {
@@ -496,6 +508,7 @@ export type NotionPage = {
 export type ProcessRule = {
   mode: ProcessMode
   rules: Rules
+  summary_index_setting?: SummaryIndexSetting
 }
 
 export type createDocumentResponse = {
@@ -604,6 +617,7 @@ export type SegmentDetailModel = {
   error: string | null
   stopped_at: number
   answer?: string
+  summary?: string
   child_chunks?: ChildChunkDetail[]
   updated_at: number
   attachments: Attachment[]
@@ -647,6 +661,7 @@ export type HitTesting = {
   tsne_position: TsnePosition
   child_chunks: HitTestingChildChunk[] | null
   files: Attachment[]
+  summary?: string
 }
 
 export type ExternalKnowledgeBaseHitTesting = {
@@ -726,6 +741,7 @@ export type RelatedAppResponse = {
 export type SegmentUpdater = {
   content: string
   answer?: string
+  summary?: string
   keywords?: string[]
   regenerate_child_chunks?: boolean
   attachment_ids?: string[]
@@ -808,6 +824,7 @@ export enum DocumentActionType {
   unArchive = 'un_archive',
   delete = 'delete',
   update = 'update',
+  summary = 'summary',
 }
 
 export type UpdateDocumentBatchParams = {
@@ -836,7 +853,9 @@ export const DOC_FORM_ICON: Record<ChunkingMode.text | ChunkingMode.qa | Chunkin
   [ChunkingMode.parentChild]: ParentChildChunk,
 }
 
-export const DOC_FORM_TEXT: Record<ChunkingMode, string> = {
+type ChunkingModeText = I18nKeysByPrefix<'dataset', 'chunkingMode.'>
+
+export const DOC_FORM_TEXT: Record<ChunkingMode, ChunkingModeText> = {
   [ChunkingMode.text]: 'general',
   [ChunkingMode.qa]: 'qa',
   [ChunkingMode.parentChild]: 'parentChild',

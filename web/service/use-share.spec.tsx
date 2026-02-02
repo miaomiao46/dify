@@ -3,6 +3,7 @@ import type { AppConversationData, ConversationItem } from '@/models/share'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { act, renderHook, waitFor } from '@testing-library/react'
 import {
+  AppSourceType,
   fetchChatList,
   fetchConversations,
   generationConversationName,
@@ -15,15 +16,19 @@ import {
   useShareConversations,
 } from './use-share'
 
-vi.mock('./share', () => ({
-  fetchChatList: vi.fn(),
-  fetchConversations: vi.fn(),
-  generationConversationName: vi.fn(),
-  fetchAppInfo: vi.fn(),
-  fetchAppMeta: vi.fn(),
-  fetchAppParams: vi.fn(),
-  getAppAccessModeByAppCode: vi.fn(),
-}))
+vi.mock('./share', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./share')>()
+  return {
+    ...actual,
+    fetchChatList: vi.fn(),
+    fetchConversations: vi.fn(),
+    generationConversationName: vi.fn(),
+    fetchAppInfo: vi.fn(),
+    fetchAppMeta: vi.fn(),
+    fetchAppParams: vi.fn(),
+    getAppAccessModeByAppCode: vi.fn(),
+  }
+})
 
 const mockFetchConversations = vi.mocked(fetchConversations)
 const mockFetchChatList = vi.mocked(fetchChatList)
@@ -80,6 +85,7 @@ describe('useShareConversations', () => {
       appId: undefined,
       pinned: true,
       limit: 50,
+      appSourceType: AppSourceType.webApp,
     }
     const response = createConversationData()
     mockFetchConversations.mockResolvedValueOnce(response)
@@ -89,7 +95,7 @@ describe('useShareConversations', () => {
 
     // Assert
     await waitFor(() => {
-      expect(mockFetchConversations).toHaveBeenCalledWith(false, undefined, undefined, true, 50)
+      expect(mockFetchConversations).toHaveBeenCalledWith(AppSourceType.webApp, undefined, undefined, true, 50)
     })
     await waitFor(() => {
       expect(result.current.data).toEqual(response)
@@ -102,6 +108,7 @@ describe('useShareConversations', () => {
     const params = {
       isInstalledApp: true,
       appId: undefined,
+      appSourceType: AppSourceType.installedApp,
     }
 
     // Act
@@ -127,6 +134,7 @@ describe('useShareChatList', () => {
       conversationId: 'conversation-1',
       isInstalledApp: true,
       appId: 'app-1',
+      appSourceType: AppSourceType.installedApp,
     }
     const response = { data: [] }
     mockFetchChatList.mockResolvedValueOnce(response)
@@ -136,7 +144,7 @@ describe('useShareChatList', () => {
 
     // Assert
     await waitFor(() => {
-      expect(mockFetchChatList).toHaveBeenCalledWith('conversation-1', true, 'app-1')
+      expect(mockFetchChatList).toHaveBeenCalledWith('conversation-1', AppSourceType.installedApp, 'app-1')
     })
     await waitFor(() => {
       expect(result.current.data).toEqual(response)
@@ -149,6 +157,7 @@ describe('useShareChatList', () => {
       conversationId: '',
       isInstalledApp: false,
       appId: undefined,
+      appSourceType: AppSourceType.webApp,
     }
 
     // Act
@@ -159,6 +168,52 @@ describe('useShareChatList', () => {
       expect(result.current.fetchStatus).toBe('idle')
     })
     expect(mockFetchChatList).not.toHaveBeenCalled()
+  })
+
+  it('should always consider data stale to ensure fresh data on conversation switch (GitHub #30378)', async () => {
+    // This test verifies that chat list data is always considered stale (staleTime: 0)
+    // which ensures fresh data is fetched when switching back to a conversation.
+    // Without this, users would see outdated messages until double-switching.
+    const queryClient = createQueryClient()
+    const wrapper = createWrapper(queryClient)
+    const params = {
+      conversationId: 'conversation-1',
+      isInstalledApp: false,
+      appId: undefined,
+      appSourceType: AppSourceType.webApp,
+    }
+    const initialResponse = { data: [{ id: '1', content: 'initial' }] }
+    const updatedResponse = { data: [{ id: '1', content: 'initial' }, { id: '2', content: 'new message' }] }
+
+    // First fetch
+    mockFetchChatList.mockResolvedValueOnce(initialResponse)
+    const { result, unmount } = renderHook(() => useShareChatList(params), { wrapper })
+
+    await waitFor(() => {
+      expect(result.current.data).toEqual(initialResponse)
+    })
+    expect(mockFetchChatList).toHaveBeenCalledTimes(1)
+
+    // Unmount (simulates switching away from conversation)
+    unmount()
+
+    // Remount with same params (simulates switching back)
+    // With staleTime: 0, this should trigger a background refetch
+    mockFetchChatList.mockResolvedValueOnce(updatedResponse)
+    const { result: result2 } = renderHook(() => useShareChatList(params), { wrapper })
+
+    // Should immediately return cached data
+    expect(result2.current.data).toEqual(initialResponse)
+
+    // Should trigger background refetch due to staleTime: 0
+    await waitFor(() => {
+      expect(mockFetchChatList).toHaveBeenCalledTimes(2)
+    })
+
+    // Should update with fresh data
+    await waitFor(() => {
+      expect(result2.current.data).toEqual(updatedResponse)
+    })
   })
 })
 
@@ -174,6 +229,7 @@ describe('useShareConversationName', () => {
       conversationId: 'conversation-2',
       isInstalledApp: false,
       appId: undefined,
+      appSourceType: AppSourceType.webApp,
     }
     const response = createConversationItem({ id: 'conversation-2', name: 'Generated' })
     mockGenerationConversationName.mockResolvedValueOnce(response)
@@ -183,7 +239,7 @@ describe('useShareConversationName', () => {
 
     // Assert
     await waitFor(() => {
-      expect(mockGenerationConversationName).toHaveBeenCalledWith(false, undefined, 'conversation-2')
+      expect(mockGenerationConversationName).toHaveBeenCalledWith(AppSourceType.webApp, undefined, 'conversation-2')
     })
     await waitFor(() => {
       expect(result.current.data).toEqual(response)
@@ -196,6 +252,7 @@ describe('useShareConversationName', () => {
       conversationId: 'conversation-3',
       isInstalledApp: false,
       appId: undefined,
+      appSourceType: AppSourceType.webApp,
     }
 
     // Act

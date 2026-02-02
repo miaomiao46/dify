@@ -36,12 +36,14 @@ import { isReRankModelSelected } from '@/app/components/datasets/common/check-re
 import EconomicalRetrievalMethodConfig from '@/app/components/datasets/common/economical-retrieval-method-config'
 import RetrievalMethodConfig from '@/app/components/datasets/common/retrieval-method-config'
 
-import { ModelTypeEnum } from '@/app/components/header/account-setting/model-provider-page/declarations'
-import { useDefaultModel, useModelList, useModelListAndDefaultModelAndCurrentProviderAndModel } from '@/app/components/header/account-setting/model-provider-page/hooks'
-import ModelSelector from '@/app/components/header/account-setting/model-provider-page/model-selector'
-import { FULL_DOC_PREVIEW_LENGTH, IS_CE_EDITION } from '@/config'
+import type { FC } from 'react'
+import type { StepTwoProps } from './types'
+import { useCallback, useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
+import Divider from '@/app/components/base/divider'
+import Toast from '@/app/components/base/toast'
 import { useDatasetDetailContextWithSelector } from '@/context/dataset-detail'
-import I18n, { useDocLink } from '@/context/i18n'
+import { useLocale } from '@/context/i18n'
 import useBreakpoints, { MediaType } from '@/hooks/use-breakpoints'
 import { LanguagesSupported } from '@/i18n-config/language'
 import { DataSourceProvider } from '@/models/common'
@@ -50,94 +52,20 @@ import { ExternalStrategyType, SplitStrategy } from '@/models/datasets'
 import { getNotionInfo, getWebsiteInfo, useCreateDocument, useCreateFirstDocument, useFetchDefaultProcessRule, useFetchFileIndexingEstimateForFile, useFetchFileIndexingEstimateForNotion, useFetchFileIndexingEstimateForWeb } from '@/service/knowledge/use-create-dataset'
 import { useInvalidDatasetList } from '@/service/knowledge/use-dataset'
 import { RETRIEVE_METHOD } from '@/types/app'
+import { ChunkingMode, ProcessMode } from '@/models/datasets'
+import { useFetchDefaultProcessRule } from '@/service/knowledge/use-create-dataset'
 import { cn } from '@/utils/classnames'
-import { ChunkContainer, QAPreview } from '../../chunk'
-import PreviewDocumentPicker from '../../common/document-picker/preview-document-picker'
-import { PreviewSlice } from '../../formatted-text/flavours/preview-slice'
-import { FormattedText } from '../../formatted-text/formatted'
-import PreviewContainer from '../../preview/container'
-import { PreviewHeader } from '../../preview/header'
-import { checkShowMultiModalTip } from '../../settings/utils'
-import FileList from '../assets/file-list-3-fill.svg'
-import Note from '../assets/note-mod.svg'
-import BlueEffect from '../assets/option-card-effect-blue.svg'
-import SettingCog from '../assets/setting-gear-mod.svg'
-import { indexMethodIcon } from '../icons'
-import escape from './escape'
-import s from './index.module.css'
-import { DelimiterInput, MaxLengthInput, OverlapInput } from './inputs'
-import LanguageSelect from './language-select'
-import { OptionCard } from './option-card'
-import unescape from './unescape'
+import { GeneralChunkingOptions, IndexingModeSection, ParentChildOptions, PreviewPanel, StepTwoFooter } from './components'
+import { IndexingType, MAXIMUM_CHUNK_TOKEN_LENGTH, useDocumentCreation, useIndexingConfig, useIndexingEstimate, usePreviewState, useSegmentationState } from './hooks'
 
-const TextLabel: FC<PropsWithChildren> = (props) => {
-  return <label className="system-sm-semibold text-text-secondary">{props.children}</label>
-}
+export { IndexingType }
 
-type StepTwoProps = {
-  isSetting?: boolean
-  documentDetail?: FullDocumentDetail
-  isAPIKeySet: boolean
-  onSetting: () => void
-  datasetId?: string
-  indexingType?: IndexingType
-  retrievalMethod?: string
-  dataSourceType: DataSourceType
-  files: CustomFile[]
-  notionPages?: NotionPage[]
-  notionCredentialId: string
-  websitePages?: CrawlResultItem[]
-  crawlOptions?: CrawlOptions
-  websiteCrawlProvider?: DataSourceProvider
-  websiteCrawlJobId?: string
-  onStepChange?: (delta: number) => void
-  updateIndexingTypeCache?: (type: string) => void
-  updateRetrievalMethodCache?: (method: string) => void
-  updateResultCache?: (res: createDocumentResponse) => void
-  onSave?: () => void
-  onCancel?: () => void
-}
-
-export enum IndexingType {
-  QUALIFIED = 'high_quality',
-  ECONOMICAL = 'economy',
-}
-
-const DEFAULT_SEGMENT_IDENTIFIER = '\\n\\n'
-const DEFAULT_MAXIMUM_CHUNK_LENGTH = 1024
-const DEFAULT_OVERLAP = 50
-const MAXIMUM_CHUNK_TOKEN_LENGTH = Number.parseInt(globalThis.document?.body?.getAttribute('data-public-indexing-max-segmentation-tokens-length') || '4000', 10)
-
-type ParentChildConfig = {
-  chunkForContext: ParentMode
-  parent: {
-    delimiter: string
-    maxLength: number
-  }
-  child: {
-    delimiter: string
-    maxLength: number
-  }
-}
-
-const defaultParentChildConfig: ParentChildConfig = {
-  chunkForContext: 'paragraph',
-  parent: {
-    delimiter: '\\n\\n',
-    maxLength: 1024,
-  },
-  child: {
-    delimiter: '\\n',
-    maxLength: 512,
-  },
-}
-
-const StepTwo = ({
+const StepTwo: FC<StepTwoProps> = ({
   isSetting,
   documentDetail,
   isAPIKeySet,
   datasetId,
-  indexingType,
+  indexingType: propsIndexingType,
   dataSourceType: inCreatePageDataSourceType,
   files,
   notionPages = [],
@@ -152,41 +80,22 @@ const StepTwo = ({
   onSave,
   onCancel,
   updateRetrievalMethodCache,
-}: StepTwoProps) => {
+}) => {
   const { t } = useTranslation()
-  const docLink = useDocLink()
-  const { locale } = useContext(I18n)
-  const media = useBreakpoints()
-  const isMobile = media === MediaType.mobile
+  const locale = useLocale()
+  const isMobile = useBreakpoints() === MediaType.mobile
+  const currentDataset = useDatasetDetailContextWithSelector(s => s.dataset)
+  const mutateDatasetRes = useDatasetDetailContextWithSelector(s => s.mutateDatasetRes)
 
-  const currentDataset = useDatasetDetailContextWithSelector(state => state.dataset)
-  const mutateDatasetRes = useDatasetDetailContextWithSelector(state => state.mutateDatasetRes)
-
+  // Computed flags
   const isInUpload = Boolean(currentDataset)
   const isUploadInEmptyDataset = isInUpload && !currentDataset?.doc_form
   const isNotUploadInEmptyDataset = !isUploadInEmptyDataset
   const isInInit = !isInUpload && !isSetting
-
   const isInCreatePage = !datasetId || (datasetId && !currentDataset?.data_source_type)
-  const dataSourceType = isInCreatePage ? inCreatePageDataSourceType : currentDataset?.data_source_type
-  const [segmentationType, setSegmentationType] = useState<ProcessMode>(
-    currentDataset?.doc_form === ChunkingMode.parentChild ? ProcessMode.parentChild : ProcessMode.general,
-  )
-  const [segmentIdentifier, doSetSegmentIdentifier] = useState(DEFAULT_SEGMENT_IDENTIFIER)
-  const setSegmentIdentifier = useCallback((value: string, canEmpty?: boolean) => {
-    doSetSegmentIdentifier(value ? escape(value) : (canEmpty ? '' : DEFAULT_SEGMENT_IDENTIFIER))
-  }, [])
-  const [maxChunkLength, setMaxChunkLength] = useState(DEFAULT_MAXIMUM_CHUNK_LENGTH) // default chunk length
-  const [limitMaxChunkLength, setLimitMaxChunkLength] = useState(MAXIMUM_CHUNK_TOKEN_LENGTH)
-  const [overlap, setOverlap] = useState(DEFAULT_OVERLAP)
-  const [rules, setRules] = useState<PreProcessingRule[]>([])
-  const [defaultConfig, setDefaultConfig] = useState<Rules>()
-  const hasSetIndexType = !!indexingType
-  const [indexType, setIndexType] = useState<IndexingType>(() => {
-    if (hasSetIndexType)
-      return indexingType
-    return isAPIKeySet ? IndexingType.QUALIFIED : IndexingType.ECONOMICAL
-  })
+  const dataSourceType = isInCreatePage ? inCreatePageDataSourceType : (currentDataset?.data_source_type ?? inCreatePageDataSourceType)
+  const hasSetIndexType = !!propsIndexingType
+  const isModelAndRetrievalConfigDisabled = !!datasetId && !!currentDataset?.data_source_type
 
   // External Split Strategy
   const [strategyType, setStrategyType] = useState<SplitStrategy>(SplitStrategy.internal)
@@ -212,36 +121,10 @@ const StepTwo = ({
   )
 
   // QA Related
+  // Document form state
+  const [docForm, setDocForm] = useState<ChunkingMode>((datasetId && documentDetail) ? documentDetail.doc_form as ChunkingMode : ChunkingMode.text)
+  const [docLanguage, setDocLanguage] = useState<string>(() => (datasetId && documentDetail) ? documentDetail.doc_language : (locale !== LanguagesSupported[1] ? 'English' : 'Chinese Simplified'))
   const [isQAConfirmDialogOpen, setIsQAConfirmDialogOpen] = useState(false)
-  const [docForm, setDocForm] = useState<ChunkingMode>(
-    (datasetId && documentDetail) ? documentDetail.doc_form as ChunkingMode : ChunkingMode.text,
-  )
-  const handleChangeDocform = (value: ChunkingMode) => {
-    if (value === ChunkingMode.qa && indexType === IndexingType.ECONOMICAL) {
-      setIsQAConfirmDialogOpen(true)
-      return
-    }
-    if (value === ChunkingMode.parentChild && indexType === IndexingType.ECONOMICAL)
-      setIndexType(IndexingType.QUALIFIED)
-
-    setDocForm(value)
-
-    if (value === ChunkingMode.parentChild)
-      setSegmentationType(ProcessMode.parentChild)
-    else
-      setSegmentationType(ProcessMode.general)
-
-    // eslint-disable-next-line ts/no-use-before-define
-    currentEstimateMutation.reset()
-  }
-
-  const [docLanguage, setDocLanguage] = useState<string>(
-    (datasetId && documentDetail) ? documentDetail.doc_language : (locale !== LanguagesSupported[1] ? 'English' : 'Chinese Simplified'),
-  )
-
-  const [parentChildConfig, setParentChildConfig] = useState<ParentChildConfig>(defaultParentChildConfig)
-
-  const getIndexing_technique = () => indexingType || indexType
   const currentDocForm = currentDataset?.doc_form || docForm
 
   const getProcessRule = (): ProcessRule => {
@@ -295,29 +178,54 @@ const StepTwo = ({
         api_key: externalSplitStrategyType === ExternalStrategyType.internal_workflow ? externalSplitStrategyApiKey : undefined,
       } : undefined,
     },
+  // Custom hooks
+  const segmentation = useSegmentationState({
+    initialSegmentationType: currentDataset?.doc_form === ChunkingMode.parentChild ? ProcessMode.parentChild : ProcessMode.general,
+    initialSummaryIndexSetting: currentDataset?.summary_index_setting,
   })
-  const notionIndexingEstimateQuery = useFetchFileIndexingEstimateForNotion({
-    docForm: currentDocForm,
-    docLanguage,
-    dataSourceType: DataSourceType.NOTION,
-    notionPages: [previewNotionPage],
-    indexingTechnique: getIndexing_technique() as any,
-    processRule: getProcessRule(),
-    dataset_id: datasetId || '',
-    credential_id: notionCredentialId,
+  const showSummaryIndexSetting = !currentDataset
+  const indexing = useIndexingConfig({
+    initialIndexType: propsIndexingType,
+    initialEmbeddingModel: currentDataset?.embedding_model ? { provider: currentDataset.embedding_model_provider, model: currentDataset.embedding_model } : undefined,
+    initialRetrievalConfig: currentDataset?.retrieval_model_dict,
+    isAPIKeySet,
+    hasSetIndexType,
   })
-
-  const websiteIndexingEstimateQuery = useFetchFileIndexingEstimateForWeb({
-    docForm: currentDocForm,
-    docLanguage,
-    dataSourceType: DataSourceType.WEB,
-    websitePages: [previewWebsitePage],
+  const preview = usePreviewState({ dataSourceType, files, notionPages, websitePages, documentDetail, datasetId })
+  const creation = useDocumentCreation({
+    datasetId,
+    isSetting,
+    documentDetail,
+    dataSourceType,
+    files,
+    notionPages,
+    notionCredentialId,
+    websitePages,
     crawlOptions,
     websiteCrawlProvider,
     websiteCrawlJobId,
-    indexingTechnique: getIndexing_technique() as any,
-    processRule: getProcessRule(),
-    dataset_id: datasetId || '',
+    onStepChange,
+    updateIndexingTypeCache,
+    updateResultCache,
+    updateRetrievalMethodCache,
+    onSave,
+    mutateDatasetRes,
+  })
+  const estimateHook = useIndexingEstimate({
+    dataSourceType,
+    datasetId,
+    currentDocForm,
+    docLanguage,
+    files,
+    previewFileName: preview.previewFile?.name,
+    previewNotionPage: preview.previewNotionPage,
+    notionCredentialId,
+    previewWebsitePage: preview.previewWebsitePage,
+    crawlOptions,
+    websiteCrawlProvider,
+    websiteCrawlJobId,
+    indexingTechnique: indexing.getIndexingTechnique() as IndexingType,
+    processRule: segmentation.getProcessRule(currentDocForm),
   })
 
   const currentEstimateMutation = dataSourceType === DataSourceType.FILE
@@ -524,131 +432,87 @@ const StepTwo = ({
     return params
   }
 
+  // Fetch default process rule
   const fetchDefaultProcessRuleMutation = useFetchDefaultProcessRule({
     onSuccess(data) {
-      const separator = data.rules.segmentation.separator
-      setSegmentIdentifier(separator)
-      setMaxChunkLength(data.rules.segmentation.max_tokens)
-      setOverlap(data.rules.segmentation.chunk_overlap!)
-      setRules(data.rules.pre_processing_rules)
-      setDefaultConfig(data.rules)
-      setLimitMaxChunkLength(data.limits.indexing_max_segmentation_tokens_length)
+      segmentation.setSegmentIdentifier(data.rules.segmentation.separator)
+      segmentation.setMaxChunkLength(data.rules.segmentation.max_tokens)
+      segmentation.setOverlap(data.rules.segmentation.chunk_overlap!)
+      segmentation.setRules(data.rules.pre_processing_rules)
+      segmentation.setDefaultConfig(data.rules)
+      segmentation.setLimitMaxChunkLength(data.limits.indexing_max_segmentation_tokens_length)
     },
   })
 
-  const getRulesFromDetail = () => {
-    if (documentDetail) {
-      const rules = documentDetail.dataset_process_rule.rules
-      const separator = rules.segmentation.separator
-      const max = rules.segmentation.max_tokens
-      const overlap = rules.segmentation.chunk_overlap
-      const isHierarchicalDocument = documentDetail.doc_form === ChunkingMode.parentChild
-        || (rules.parent_mode && rules.subchunk_segmentation)
-      setSegmentIdentifier(separator)
-      setMaxChunkLength(max)
-      setOverlap(overlap!)
-      setRules(rules.pre_processing_rules)
-      setDefaultConfig(rules)
-
-      if (isHierarchicalDocument) {
-        setParentChildConfig({
-          chunkForContext: rules.parent_mode || 'paragraph',
-          parent: {
-            delimiter: escape(rules.segmentation.separator),
-            maxLength: rules.segmentation.max_tokens,
-          },
-          child: {
-            delimiter: escape(rules.subchunk_segmentation.separator),
-            maxLength: rules.subchunk_segmentation.max_tokens,
-          },
-        })
-      }
+  // Event handlers
+  const handleDocFormChange = useCallback((value: ChunkingMode) => {
+    if (value === ChunkingMode.qa && indexing.indexType === IndexingType.ECONOMICAL) {
+      setIsQAConfirmDialogOpen(true)
+      return
     }
-  }
+    if (value === ChunkingMode.parentChild && indexing.indexType === IndexingType.ECONOMICAL)
+      indexing.setIndexType(IndexingType.QUALIFIED)
+    setDocForm(value)
+    segmentation.setSegmentationType(value === ChunkingMode.parentChild ? ProcessMode.parentChild : ProcessMode.general)
+    estimateHook.reset()
+  }, [indexing, segmentation, estimateHook])
 
-  const getDefaultMode = () => {
-    if (documentDetail)
-      setSegmentationType(documentDetail.dataset_process_rule.mode)
-  }
-
-  const createFirstDocumentMutation = useCreateFirstDocument()
-  const createDocumentMutation = useCreateDocument(datasetId!)
-
-  const isCreating = createFirstDocumentMutation.isPending || createDocumentMutation.isPending
-  const invalidDatasetList = useInvalidDatasetList()
-
-  const createHandle = async () => {
-    const params = getCreationParams()
-    if (!params)
-      return false
-
-    if (!datasetId) {
-      await createFirstDocumentMutation.mutateAsync(
-        params,
-        {
-          onSuccess(data) {
-            updateIndexingTypeCache?.(indexType as string)
-            updateResultCache?.(data)
-            updateRetrievalMethodCache?.(retrievalConfig.search_method as string)
-          },
-        },
-      )
+  const updatePreview = useCallback(() => {
+    if (segmentation.segmentationType === ProcessMode.general && segmentation.maxChunkLength > MAXIMUM_CHUNK_TOKEN_LENGTH) {
+      Toast.notify({ type: 'error', message: t('stepTwo.maxLengthCheck', { ns: 'datasetCreation', limit: MAXIMUM_CHUNK_TOKEN_LENGTH }) })
+      return
     }
-    else {
-      await createDocumentMutation.mutateAsync(params, {
-        onSuccess(data) {
-          updateIndexingTypeCache?.(indexType as string)
-          updateResultCache?.(data)
-          updateRetrievalMethodCache?.(retrievalConfig.search_method as string)
-        },
-      })
-    }
-    if (mutateDatasetRes)
-      mutateDatasetRes()
-    invalidDatasetList()
-    trackEvent('create_datasets', {
-      data_source_type: dataSourceType,
-      indexing_technique: getIndexing_technique(),
+    estimateHook.fetchEstimate()
+  }, [segmentation, t, estimateHook])
+
+  const handleCreate = useCallback(async () => {
+    const isValid = creation.validateParams({
+      segmentationType: segmentation.segmentationType,
+      maxChunkLength: segmentation.maxChunkLength,
+      limitMaxChunkLength: segmentation.limitMaxChunkLength,
+      overlap: segmentation.overlap,
+      indexType: indexing.indexType,
+      embeddingModel: indexing.embeddingModel,
+      rerankModelList: indexing.rerankModelList,
+      retrievalConfig: indexing.retrievalConfig,
     })
-    onStepChange?.(+1)
-    if (isSetting)
-      onSave?.()
-  }
+    if (!isValid)
+      return
+    const params = creation.buildCreationParams(currentDocForm, docLanguage, segmentation.getProcessRule(currentDocForm), indexing.retrievalConfig, indexing.embeddingModel, indexing.getIndexingTechnique(), segmentation.summaryIndexSetting)
+    if (!params)
+      return
+    await creation.executeCreation(params, indexing.indexType, indexing.retrievalConfig)
+  }, [creation, segmentation, indexing, currentDocForm, docLanguage])
 
+  const handlePickerChange = useCallback((selected: { id: string, name: string }) => {
+    estimateHook.reset()
+    preview.handlePreviewChange(selected)
+    estimateHook.fetchEstimate()
+  }, [estimateHook, preview])
+
+  const handleQAConfirm = useCallback(() => {
+    setIsQAConfirmDialogOpen(false)
+    indexing.setIndexType(IndexingType.QUALIFIED)
+    setDocForm(ChunkingMode.qa)
+  }, [indexing])
+
+  // Initialize rules
   useEffect(() => {
-    // fetch rules
     if (!isSetting) {
       fetchDefaultProcessRuleMutation.mutate('/datasets/process-rule')
     }
-    else {
-      getRulesFromDetail()
-      getDefaultMode()
+    else if (documentDetail) {
+      const rules = documentDetail.dataset_process_rule.rules
+      const isHierarchical = documentDetail.doc_form === ChunkingMode.parentChild || Boolean(rules.parent_mode && rules.subchunk_segmentation)
+      segmentation.applyConfigFromRules(rules, isHierarchical)
+      segmentation.setSegmentationType(documentDetail.dataset_process_rule.mode)
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  useEffect(() => {
-    // get indexing type by props
-    if (indexingType)
-      setIndexType(indexingType as IndexingType)
-    else
-      setIndexType(isAPIKeySet ? IndexingType.QUALIFIED : IndexingType.ECONOMICAL)
-  }, [isAPIKeySet, indexingType, datasetId])
-
-  const isModelAndRetrievalConfigDisabled = !!datasetId && !!currentDataset?.data_source_type
-
-  const showMultiModalTip = useMemo(() => {
-    return checkShowMultiModalTip({
-      embeddingModel,
-      rerankingEnable: retrievalConfig.reranking_enable,
-      rerankModel: {
-        rerankingProviderName: retrievalConfig.reranking_model.reranking_provider_name,
-        rerankingModelName: retrievalConfig.reranking_model.reranking_model_name,
-      },
-      indexMethod: indexType,
-      embeddingModelList,
-      rerankModelList,
-    })
-  }, [embeddingModel, retrievalConfig.reranking_enable, retrievalConfig.reranking_model, indexType, embeddingModelList, rerankModelList])
+  // Show options conditions
+  const showGeneralOption = (isInUpload && [ChunkingMode.text, ChunkingMode.qa].includes(currentDataset!.doc_form)) || isUploadInEmptyDataset || isInInit
+  const showParentChildOption = (isInUpload && currentDataset!.doc_form === ChunkingMode.parentChild) || isUploadInEmptyDataset || isInInit
 
   return (
     <div className="flex h-full w-full">
@@ -1163,71 +1027,74 @@ const StepTwo = ({
               </div>
             )}
           </div>
+        <div className="system-md-semibold mb-1 text-text-secondary">{t('stepTwo.segmentation', { ns: 'datasetCreation' })}</div>
+        {showGeneralOption && (
+          <GeneralChunkingOptions
+            segmentIdentifier={segmentation.segmentIdentifier}
+            maxChunkLength={segmentation.maxChunkLength}
+            overlap={segmentation.overlap}
+            rules={segmentation.rules}
+            currentDocForm={currentDocForm}
+            docLanguage={docLanguage}
+            isActive={[ChunkingMode.text, ChunkingMode.qa].includes(currentDocForm)}
+            isInUpload={isInUpload}
+            isNotUploadInEmptyDataset={isNotUploadInEmptyDataset}
+            hasCurrentDatasetDocForm={!!currentDataset?.doc_form}
+            onSegmentIdentifierChange={value => segmentation.setSegmentIdentifier(value, true)}
+            onMaxChunkLengthChange={segmentation.setMaxChunkLength}
+            onOverlapChange={segmentation.setOverlap}
+            onRuleToggle={segmentation.toggleRule}
+            onDocFormChange={handleDocFormChange}
+            onDocLanguageChange={setDocLanguage}
+            onPreview={updatePreview}
+            onReset={segmentation.resetToDefaults}
+            locale={locale}
+            showSummaryIndexSetting={showSummaryIndexSetting}
+            summaryIndexSetting={segmentation.summaryIndexSetting}
+            onSummaryIndexSettingChange={segmentation.handleSummaryIndexSettingChange}
+          />
+        )}
+        {showParentChildOption && (
+          <ParentChildOptions
+            parentChildConfig={segmentation.parentChildConfig}
+            rules={segmentation.rules}
+            currentDocForm={currentDocForm}
+            isActive={currentDocForm === ChunkingMode.parentChild}
+            isInUpload={isInUpload}
+            isNotUploadInEmptyDataset={isNotUploadInEmptyDataset}
+            onDocFormChange={handleDocFormChange}
+            onChunkForContextChange={segmentation.setChunkForContext}
+            onParentDelimiterChange={v => segmentation.updateParentConfig('delimiter', v)}
+            onParentMaxLengthChange={v => segmentation.updateParentConfig('maxLength', v)}
+            onChildDelimiterChange={v => segmentation.updateChildConfig('delimiter', v)}
+            onChildMaxLengthChange={v => segmentation.updateChildConfig('maxLength', v)}
+            onRuleToggle={segmentation.toggleRule}
+            onPreview={updatePreview}
+            onReset={segmentation.resetToDefaults}
+            showSummaryIndexSetting={showSummaryIndexSetting}
+            summaryIndexSetting={segmentation.summaryIndexSetting}
+            onSummaryIndexSettingChange={segmentation.handleSummaryIndexSettingChange}
+          />
         )}
         <Divider className="my-5" />
-        {/* Retrieval Method Config */}
-        <div>
-          {!isModelAndRetrievalConfigDisabled
-            ? (
-                <div className="mb-1">
-                  <div className="system-md-semibold mb-0.5 text-text-secondary">{t('datasetSettings.form.retrievalSetting.title')}</div>
-                  <div className="body-xs-regular text-text-tertiary">
-                    <a
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      href={docLink('/guides/knowledge-base/create-knowledge-and-upload-documents')}
-                      className="text-text-accent"
-                    >
-                      {t('datasetSettings.form.retrievalSetting.learnMore')}
-                    </a>
-                    {t('datasetSettings.form.retrievalSetting.longDescription')}
-                  </div>
-                </div>
-              )
-            : (
-                <div className={cn('system-md-semibold mb-0.5 text-text-secondary', 'flex items-center justify-between')}>
-                  <div>{t('datasetSettings.form.retrievalSetting.title')}</div>
-                </div>
-              )}
-
-          <div className="">
-            {
-              getIndexing_technique() === IndexingType.QUALIFIED
-                ? (
-                    <RetrievalMethodConfig
-                      disabled={isModelAndRetrievalConfigDisabled}
-                      value={retrievalConfig}
-                      onChange={setRetrievalConfig}
-                      showMultiModalTip={showMultiModalTip}
-                    />
-                  )
-                : (
-                    <EconomicalRetrievalMethodConfig
-                      disabled={isModelAndRetrievalConfigDisabled}
-                      value={retrievalConfig}
-                      onChange={setRetrievalConfig}
-                    />
-                  )
-            }
-          </div>
-        </div>
-
-        {!isSetting
-          ? (
-              <div className="mt-8 flex items-center py-2">
-                <Button onClick={() => onStepChange?.(-1)}>
-                  <RiArrowLeftLine className="mr-1 h-4 w-4" />
-                  {t('datasetCreation.stepTwo.previousStep')}
-                </Button>
-                <Button className="ml-auto" loading={isCreating} variant="primary" onClick={createHandle}>{t('datasetCreation.stepTwo.nextStep')}</Button>
-              </div>
-            )
-          : (
-              <div className="mt-8 flex items-center py-2">
-                <Button loading={isCreating} variant="primary" onClick={createHandle}>{t('datasetCreation.stepTwo.save')}</Button>
-                <Button className="ml-2" onClick={onCancel}>{t('datasetCreation.stepTwo.cancel')}</Button>
-              </div>
-            )}
+        <IndexingModeSection
+          indexType={indexing.indexType}
+          hasSetIndexType={hasSetIndexType}
+          docForm={docForm}
+          embeddingModel={indexing.embeddingModel}
+          embeddingModelList={indexing.embeddingModelList}
+          retrievalConfig={indexing.retrievalConfig}
+          showMultiModalTip={indexing.showMultiModalTip}
+          isModelAndRetrievalConfigDisabled={isModelAndRetrievalConfigDisabled}
+          datasetId={datasetId}
+          isQAConfirmDialogOpen={isQAConfirmDialogOpen}
+          onIndexTypeChange={indexing.setIndexType}
+          onEmbeddingModelChange={indexing.setEmbeddingModel}
+          onRetrievalConfigChange={indexing.setRetrievalConfig}
+          onQAConfirmDialogClose={() => setIsQAConfirmDialogOpen(false)}
+          onQAConfirmDialogConfirm={handleQAConfirm}
+        />
+        <StepTwoFooter isSetting={isSetting} isCreating={creation.isCreating} onPrevious={() => onStepChange?.(-1)} onCreate={handleCreate} onCancel={onCancel} />
       </div>
       <FloatRightContainer isMobile={isMobile} isOpen={true} onClose={noop} footer={null}>
         <PreviewContainer
@@ -1407,6 +1274,19 @@ const StepTwo = ({
           )}
         </PreviewContainer>
       </FloatRightContainer>
+      <PreviewPanel
+        isMobile={isMobile}
+        dataSourceType={dataSourceType}
+        currentDocForm={currentDocForm}
+        estimate={estimateHook.estimate}
+        parentChildConfig={segmentation.parentChildConfig}
+        isSetting={isSetting}
+        pickerFiles={preview.getPreviewPickerItems() as Array<{ id: string, name: string, extension: string }>}
+        pickerValue={preview.getPreviewPickerValue()}
+        isIdle={estimateHook.isIdle}
+        isPending={estimateHook.isPending}
+        onPickerChange={handlePickerChange}
+      />
     </div>
   )
 }

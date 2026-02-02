@@ -1,6 +1,7 @@
 'use client'
 import type { NotionPage } from '@/models/common'
 import type { CrawlOptions, CrawlResultItem, createDocumentResponse, FileItem } from '@/models/datasets'
+import type { RETRIEVE_METHOD } from '@/types/app'
 import { produce } from 'immer'
 import * as React from 'react'
 import { useCallback, useEffect, useState } from 'react'
@@ -48,7 +49,7 @@ const DatasetUpdateForm = ({ datasetId }: DatasetUpdateFormProps) => {
   const [dataSourceType, setDataSourceType] = useState<DataSourceType>(DataSourceType.FILE)
   const [step, setStep] = useState(1)
   const [indexingTypeCache, setIndexTypeCache] = useState('')
-  const [retrievalMethodCache, setRetrievalMethodCache] = useState('')
+  const [retrievalMethodCache, setRetrievalMethodCache] = useState<RETRIEVE_METHOD | ''>('')
   const [fileList, setFiles] = useState<FileItem[]>([])
   const [result, setResult] = useState<any>()
   const [notionPages, setNotionPages] = useState<NotionPage[]>([])
@@ -96,7 +97,7 @@ const DatasetUpdateForm = ({ datasetId }: DatasetUpdateFormProps) => {
     setResult(res)
   }, [])
 
-  const updateRetrievalMethodCache = useCallback((method: string) => {
+  const updateRetrievalMethodCache = useCallback((method: RETRIEVE_METHOD | '') => {
     setRetrievalMethodCache(method)
   }, [])
 
@@ -156,7 +157,7 @@ const DatasetUpdateForm = ({ datasetId }: DatasetUpdateFormProps) => {
   }, [step, initialUnusedFilesFetched, fetchUnusedFilesData])
 
   if (fetchingAuthedDataSourceListError)
-    return <AppUnavailable code={500} unknownReason={t('datasetCreation.error.unavailable') as string} />
+    return <AppUnavailable code={500} unknownReason={t('error.unavailable', { ns: 'datasetCreation' }) as string} />
 
   return (
     <div className="flex flex-col overflow-hidden bg-components-panel-bg" style={{ height: 'calc(100vh - 56px)' }}>
@@ -219,7 +220,7 @@ const DatasetUpdateForm = ({ datasetId }: DatasetUpdateFormProps) => {
                   datasetId={datasetId}
                   datasetName={datasetDetail?.name}
                   indexingType={datasetDetail?.indexing_technique || indexingTypeCache}
-                  retrievalMethod={datasetDetail?.retrieval_model_dict?.search_method || retrievalMethodCache}
+                  retrievalMethod={datasetDetail?.retrieval_model_dict?.search_method || retrievalMethodCache || undefined}
                   creationCache={result}
                 />
               )}

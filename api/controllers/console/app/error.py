@@ -82,13 +82,13 @@ class ProviderNotSupportSpeechToTextError(BaseHTTPException):
 class DraftWorkflowNotExist(BaseHTTPException):
     error_code = "draft_workflow_not_exist"
     description = "Draft workflow need to be initialized."
-    code = 400
+    code = 404
 
 
 class DraftWorkflowNotSync(BaseHTTPException):
     error_code = "draft_workflow_not_sync"
     description = "Workflow graph might have been modified, please refresh and resubmit."
-    code = 400
+    code = 409
 
 
 class TracingConfigNotExist(BaseHTTPException):
@@ -120,4 +120,9 @@ class InvokeRateLimitError(BaseHTTPException):
 class FileMarkError(BaseHTTPException):
     error_code = "mark_file_used_error"
     description = "Mark File Unused Error"
+
+
+class NeedAddIdsError(BaseHTTPException):
+    error_code = "need_add_ids"
+    description = "Need to add ids."
     code = 400

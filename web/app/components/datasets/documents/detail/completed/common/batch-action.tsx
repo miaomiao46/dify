@@ -1,20 +1,23 @@
 import type { FC } from 'react'
-import { RiArchive2Line, RiCheckboxCircleLine, RiCloseCircleLine, RiDeleteBinLine, RiDraftLine, RiRefreshLine } from '@remixicon/react'
+import { RiArchive2Line, RiCheckboxCircleLine, RiCloseCircleLine, RiDeleteBinLine, RiDownload2Line, RiDraftLine, RiRefreshLine } from '@remixicon/react'
 import { useBoolean } from 'ahooks'
 import * as React from 'react'
 import { useTranslation } from 'react-i18next'
 import Button from '@/app/components/base/button'
 import Confirm from '@/app/components/base/confirm'
 import Divider from '@/app/components/base/divider'
+import { SearchLinesSparkle } from '@/app/components/base/icons/src/vender/knowledge'
 import { cn } from '@/utils/classnames'
 
-const i18nPrefix = 'dataset.batchAction'
+const i18nPrefix = 'batchAction'
 type IBatchActionProps = {
   className?: string
   selectedIds: string[]
   onBatchEnable: () => void
   onBatchDisable: () => void
+  onBatchDownload?: () => void
   onBatchDelete: () => Promise<void>
+  onBatchSummary?: () => void
   onArchive?: () => void
   onEditMetadata?: () => void
   onBatchReIndex?: () => void
@@ -26,6 +29,8 @@ const BatchAction: FC<IBatchActionProps> = ({
   selectedIds,
   onBatchEnable,
   onBatchDisable,
+  onBatchSummary,
+  onBatchDownload,
   onArchive,
   onBatchDelete,
   onEditMetadata,
@@ -53,7 +58,7 @@ const BatchAction: FC<IBatchActionProps> = ({
           <span className="system-xs-medium flex h-5 w-5 items-center justify-center rounded-md bg-text-accent text-text-primary-on-surface">
             {selectedIds.length}
           </span>
-          <span className="system-sm-semibold text-text-accent">{t(`${i18nPrefix}.selected`)}</span>
+          <span className="system-sm-semibold text-text-accent">{t(`${i18nPrefix}.selected`, { ns: 'dataset' })}</span>
         </div>
         <Divider type="vertical" className="mx-0.5 h-3.5 bg-divider-regular" />
         <Button
@@ -62,7 +67,7 @@ const BatchAction: FC<IBatchActionProps> = ({
           onClick={onBatchEnable}
         >
           <RiCheckboxCircleLine className="size-4" />
-          <span className="px-0.5">{t(`${i18nPrefix}.enable`)}</span>
+          <span className="px-0.5">{t(`${i18nPrefix}.enable`, { ns: 'dataset' })}</span>
         </Button>
         <Button
           variant="ghost"
@@ -70,7 +75,7 @@ const BatchAction: FC<IBatchActionProps> = ({
           onClick={onBatchDisable}
         >
           <RiCloseCircleLine className="size-4" />
-          <span className="px-0.5">{t(`${i18nPrefix}.disable`)}</span>
+          <span className="px-0.5">{t(`${i18nPrefix}.disable`, { ns: 'dataset' })}</span>
         </Button>
         {onEditMetadata && (
           <Button
@@ -79,10 +84,19 @@ const BatchAction: FC<IBatchActionProps> = ({
             onClick={onEditMetadata}
           >
             <RiDraftLine className="size-4" />
-            <span className="px-0.5">{t('dataset.metadata.metadata')}</span>
+            <span className="px-0.5">{t('metadata.metadata', { ns: 'dataset' })}</span>
           </Button>
         )}
-
+        {onBatchSummary && (
+          <Button
+            variant="ghost"
+            className="gap-x-0.5 px-3"
+            onClick={onBatchSummary}
+          >
+            <SearchLinesSparkle className="size-4" />
+            <span className="px-0.5">{t('list.action.summary', { ns: 'datasetDocuments' })}</span>
+          </Button>
+        )}
         {onArchive && (
           <Button
             variant="ghost"
@@ -90,7 +104,7 @@ const BatchAction: FC<IBatchActionProps> = ({
             onClick={onArchive}
           >
             <RiArchive2Line className="size-4" />
-            <span className="px-0.5">{t(`${i18nPrefix}.archive`)}</span>
+            <span className="px-0.5">{t(`${i18nPrefix}.archive`, { ns: 'dataset' })}</span>
           </Button>
         )}
         {onBatchReIndex && (
@@ -100,7 +114,17 @@ const BatchAction: FC<IBatchActionProps> = ({
             onClick={onBatchReIndex}
           >
             <RiRefreshLine className="size-4" />
-            <span className="px-0.5">{t(`${i18nPrefix}.reIndex`)}</span>
+            <span className="px-0.5">{t(`${i18nPrefix}.reIndex`, { ns: 'dataset' })}</span>
+          </Button>
+        )}
+        {onBatchDownload && (
+          <Button
+            variant="ghost"
+            className="gap-x-0.5 px-3"
+            onClick={onBatchDownload}
+          >
+            <RiDownload2Line className="size-4" />
+            <span className="px-0.5">{t(`${i18nPrefix}.download`, { ns: 'dataset' })}</span>
           </Button>
         )}
         <Button
@@ -110,7 +134,7 @@ const BatchAction: FC<IBatchActionProps> = ({
           onClick={showDeleteConfirm}
         >
           <RiDeleteBinLine className="size-4" />
-          <span className="px-0.5">{t(`${i18nPrefix}.delete`)}</span>
+          <span className="px-0.5">{t(`${i18nPrefix}.delete`, { ns: 'dataset' })}</span>
         </Button>
 
         <Divider type="vertical" className="mx-0.5 h-3.5 bg-divider-regular" />
@@ -119,16 +143,16 @@ const BatchAction: FC<IBatchActionProps> = ({
           className="px-3"
           onClick={onCancel}
         >
-          <span className="px-0.5">{t(`${i18nPrefix}.cancel`)}</span>
+          <span className="px-0.5">{t(`${i18nPrefix}.cancel`, { ns: 'dataset' })}</span>
         </Button>
       </div>
       {
         isShowDeleteConfirm && (
           <Confirm
             isShow
-            title={t('datasetDocuments.list.delete.title')}
-            content={t('datasetDocuments.list.delete.content')}
-            confirmText={t('common.operation.sure')}
+            title={t('list.delete.title', { ns: 'datasetDocuments' })}
+            content={t('list.delete.content', { ns: 'datasetDocuments' })}
+            confirmText={t('operation.sure', { ns: 'common' })}
             onConfirm={handleBatchDelete}
             onCancel={hideDeleteConfirm}
             isLoading={isDeleting}
