@@ -86,6 +86,7 @@
   "list.table.header.status": "状态",
   "list.table.header.uploadTime": "上传时间",
   "list.table.header.words": "字符数",
+  "list.table.header.update": "自动更新",
   "list.table.name": "名称",
   "list.table.rename": "重命名",
   "list.title": "文档",

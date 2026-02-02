@@ -2,6 +2,7 @@
   "allExternalTip": "仅使用外部知识时，用户可以选择是否启用 Rerank 模型。如果不启用，检索到的文本块将根据分数排序。当不同知识库的检索策略不一致时，结果可能不准确。",
   "allKnowledge": "所有知识库",
   "allKnowledgeDescription": "选择以显示该工作区内所有知识库。只有工作区所有者才能管理所有知识库。",
+  "patchAutoUpdate": "批量自动更新",
   "appCount": " 关联应用",
   "batchAction.archive": "归档",
   "batchAction.cancel": "取消",

@@ -1,6 +1,6 @@
-import logging
 from __future__ import annotations
 
+import logging
 import uuid
 from collections.abc import Generator, Mapping
 from typing import TYPE_CHECKING, Any, Union

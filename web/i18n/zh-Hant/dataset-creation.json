@@ -155,6 +155,7 @@
   "stepTwo.recommend": "推薦",
   "stepTwo.removeExtraSpaces": "替換掉連續的空格、換行符和製表符",
   "stepTwo.removeStopwords": "去除停用詞，例如“a”，“an”，“the”等",
+  "stepTwo.enableTableAndPicRecognition": "啟用表格和圖片解析",
   "stepTwo.removeUrlEmails": "刪除所有 URL 和電子郵件地址",
   "stepTwo.reset": "重置",
   "stepTwo.retrievalSettingTip": "要更改檢索方法，請轉到",

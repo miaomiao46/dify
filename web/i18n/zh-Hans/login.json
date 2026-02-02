@@ -111,5 +111,6 @@
   "welcome": "👋 欢迎！请登录以开始使用。",
   "withGitHub": "使用 GitHub 登录",
   "withGoogle": "使用 Google 登录",
-  "withSSO": "使用 SSO 登录"
+  "withSSO": "使用 SSO 登录",
+  "withOAuth2": "使用 OneDot OAuth2 登录"
 }

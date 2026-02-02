@@ -2,6 +2,7 @@
   "allExternalTip": "僅使用外部知識時，用戶可以選擇是否啟用 Rerank 模型。如果未啟用，則檢索到的數據塊將根據分數進行排序。當不同知識庫的檢索策略不一致時，就會不準確。",
   "allKnowledge": "所有知識",
   "allKnowledgeDescription": "選擇以顯示此工作區中的所有知識。只有 Workspace 擁有者可以管理所有知識。",
+  "patchAutoUpdate": "批量自動更新",
   "appCount": " 關聯應用",
   "batchAction.archive": "檔案",
   "batchAction.cancel": "取消",

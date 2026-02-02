@@ -2,6 +2,7 @@
   "allExternalTip": "When using external knowledge only, the user can choose whether to enable the Rerank model. If not enabled, retrieved chunks will be sorted based on scores. When the retrieval strategies of different knowledge bases are inconsistent, it will be inaccurate.",
   "allKnowledge": "All Knowledge",
   "allKnowledgeDescription": "Select to display all knowledge in this workspace. Only the Workspace Owner can manage all knowledge.",
+  "patchAutoUpdate": "Patch Auto Update",
   "appCount": " linked apps",
   "batchAction.archive": "Archive",
   "batchAction.cancel": "Cancel",

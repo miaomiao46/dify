@@ -111,5 +111,6 @@
   "welcome": "👋 Welcome! Please log in to get started.",
   "withGitHub": "Continue with GitHub",
   "withGoogle": "Continue with Google",
-  "withSSO": "Continue with SSO"
+  "withSSO": "Continue with SSO",
+  "withOAuth2": "onedot_oauth"
 }

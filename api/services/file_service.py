@@ -315,6 +315,7 @@ class FileService:
                     file.used = True
 
                 session.commit()
+
     @staticmethod
     def get_upload_files_by_ids(tenant_id: str, upload_file_ids: Sequence[str]) -> dict[str, UploadFile]:
         """
